@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pandas
+requests
+python-dotenv
+python-jose
+passlib==1.7.4
+bcrypt==3.2.2
+python-multipart
+MetaTrader5
+sqlalchemy

@@ -1,0 +1,6 @@
+.env
+multi_account_pnl_log.csv
+multi_account_pnl_log.xlsx
+pnl.db
+venv
+venv_test
