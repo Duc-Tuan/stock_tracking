@@ -9,3 +9,7 @@ bcrypt==3.2.2
 python-multipart
 MetaTrader5
 sqlalchemy
+cryptography
+openpyxl
+schedule
+python-socketio
