@@ -12,10 +12,10 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from src.utils.options import SENDER_PASSWORD
 
 # ======== CẤU HÌNH NGƯỜI GỬI & NGƯỜI NHẬN =========
 SENDER_EMAIL = "phamductuan26032002@gmail.com"
-SENDER_PASSWORD = "mfqh dmmr adpj vtjx"  # App password của Gmail
 RECEIVER_EMAIL = "testsendpymt5@gmail.com"  # Hoặc danh sách: ["a@a.com", "b@b.com"]
 ATTACHMENT_PATH = "multi_account_pnl_log.xlsx"  # Đường dẫn file đính kèm
 SEND_TIME = "01:02"  # Giờ gửi mỗi ngày (24h format)

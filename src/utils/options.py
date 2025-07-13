@@ -9,6 +9,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 key = os.getenv("FERNET_KEY")
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
 class RegisterRequest(BaseModel):
     username: str
