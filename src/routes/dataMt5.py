@@ -5,11 +5,9 @@ from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelAccMt5 import AccountMt5
 from fastapi.encoders import jsonable_encoder
 from src.middlewares.authMiddleware import decrypt_password_mt5
-from src.controls.daily_email_sender import send_email_with_attachment
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
-import pandas as pd
 import json
 import asyncio
 import csv
@@ -77,7 +75,6 @@ async def log_one_account(acc):
 async def log_all_accounts_parallel():
     db = SessionLocal()
     account = db.query(AccountMt5).all()
-    send_email_with_attachment()
     while True:
         print("🚀 Bắt đầu ghi log tất cả tài khoản song song...")
         tasks = [log_one_account(acc) for acc in jsonable_encoder(account)]

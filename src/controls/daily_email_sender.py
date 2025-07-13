@@ -1,9 +1,10 @@
 import smtplib
 import schedule
-import time
 import os
-import pandas as pd
 import json
+import asyncio
+
+import pandas as pd
 from datetime import datetime
 from openpyxl.utils import get_column_letter
 
@@ -130,8 +131,8 @@ def send_email_with_attachment():
 # ========= LỊCH GỬI =========
 schedule.every().day.at(SEND_TIME).do(send_email_with_attachment)
 
-print(f"🕒 Script chạy, chờ gửi email mỗi ngày lúc {SEND_TIME}...")
-
-# while True:
-#     schedule.run_pending()
-#     time.sleep(60)
+async def run_schedule_email():
+    print(f"🕒 Script chạy, chờ gửi email mỗi ngày lúc {SEND_TIME}...")
+    while True:
+        schedule.run_pending()
+        await asyncio.sleep(60)
