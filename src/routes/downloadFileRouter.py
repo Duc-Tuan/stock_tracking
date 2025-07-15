@@ -9,7 +9,7 @@ import os
 
 router = APIRouter()
 
-EXCEL_SOURCE = "multi_account_pnl_log.xlsx"
+EXCEL_SOURCE = "src/pnl_cache/pnl_log.xlsx"
 
 rename_map = {
     "login": "Tài khoản",

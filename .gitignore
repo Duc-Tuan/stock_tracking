@@ -1,6 +1,6 @@
 .env
-multi_account_pnl_log.csv
-multi_account_pnl_log.xlsx
+src\pnl_cache\pnl_log.csv
+src\pnl_cache\pnl_log.xlsx
 pnl.db
 venv
 venv_test

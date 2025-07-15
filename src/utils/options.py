@@ -10,6 +10,8 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 key = os.getenv("FERNET_KEY")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+SEND_TIME = os.getenv("SEND_TIME")
 
 class RegisterRequest(BaseModel):
     username: str

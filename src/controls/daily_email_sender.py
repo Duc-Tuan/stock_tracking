@@ -13,14 +13,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from src.utils.options import SENDER_PASSWORD
+from src.utils.options import SENDER_PASSWORD, SENDER_EMAIL, SEND_TIME
 
 # ======== CẤU HÌNH NGƯỜI GỬI & NGƯỜI NHẬN =========
-SENDER_EMAIL = "phamductuan26032002@gmail.com"
 RECEIVER_EMAIL = "testsendpymt5@gmail.com"  # Hoặc danh sách: ["a@a.com", "b@b.com"]
-ATTACHMENT_PATH = "multi_account_pnl_log.xlsx"  # Đường dẫn file đính kèm
-SEND_TIME = "01:02"  # Giờ gửi mỗi ngày (24h format)
-
+ATTACHMENT_PATH = "src/pnl_cache/pnl_log.xlsx"  # Đường dẫn file đính kèm
 
 rename_map = {
     "login": "Tài khoản",
@@ -95,7 +92,7 @@ def send_email_with_attachment():
                     worksheet.column_dimensions[get_column_letter(idx)].width = 20
 
     # ======= TẠO FILE CSV =========
-    csv_file = "multi_account_pnl_log.csv"
+    csv_file = "src/pnl_cache/pnl_log.csv"
     df.to_csv(csv_file, index=False)
     
      # ======= ĐÍNH KÈM CẢ 2 FILE =========
