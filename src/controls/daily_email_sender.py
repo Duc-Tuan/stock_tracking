@@ -7,8 +7,6 @@ import asyncio
 import pandas as pd
 from datetime import datetime
 from openpyxl.utils import get_column_letter
-
-from fastapi import HTTPException
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -16,7 +14,7 @@ from email import encoders
 from src.utils.options import SENDER_PASSWORD, SENDER_EMAIL, SEND_TIME
 
 # ======== CẤU HÌNH NGƯỜI GỬI & NGƯỜI NHẬN =========
-RECEIVER_EMAIL = "testsendpymt5@gmail.com"  # Hoặc danh sách: ["a@a.com", "b@b.com"]
+RECEIVER_EMAIL = ["testsendpymt5@gmail.com", "thaisanchezvn@gmail.com"]  # Hoặc danh sách: ["a@a.com", "b@b.com"]
 ATTACHMENT_PATH = "src/pnl_cache/pnl_log.xlsx"  # Đường dẫn file đính kèm
 
 rename_map = {
@@ -46,58 +44,81 @@ def parse_symbol(s):
 def send_email_with_attachment():
     print("📤 Đang gửi email...")
 
+    # === Chuẩn bị email ===
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = RECEIVER_EMAIL if isinstance(RECEIVER_EMAIL, str) else ", ".join(RECEIVER_EMAIL)
     msg['Subject'] = "📊 Báo cáo định kỳ theo ngày kèm file"
 
-    SEND_TIME_NOW = datetime.now().strftime("%d/%m/%Y")
-    body = f"Chào sếp,\n\nĐây là báo cáo định kỳ vào lúc {SEND_TIME} ngày {SEND_TIME_NOW} có kèm file đính kèm ở bên dưới.\n\nTrân trọng."
+    now = datetime.now()
+    body = f"""Chào sếp,
+
+Đây là báo cáo định kỳ vào lúc {SEND_TIME} ngày {now.strftime("%d/%m/%Y")} có kèm file đính kèm ở bên dưới.
+
+Trân trọng."""
     msg.attach(MIMEText(body, 'plain'))
 
-
-    # gửi file .excel
+    # === Đọc dữ liệu gốc ===
     try:
         df = pd.read_excel(ATTACHMENT_PATH)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi đọc file Excel gốc: {e}")
+        raise RuntimeError(f"Lỗi đọc file Excel gốc: {e}")
 
+    # === Parse JSON column ===
     df["by_symbol"] = df["by_symbol"].apply(parse_symbol)
 
-    file_name = f"pnl_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    # === Thư mục chứa file Excel từng login ===
+    output_folder = "exported_excels"
+    os.makedirs(output_folder, exist_ok=True)
+    generated_files = []
 
-    with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
-        for login_id, group in df.groupby("login"):
-            group = group.reset_index(drop=True)
+    # === Ghi từng file Excel ===
+    for login_id, group in df.groupby("login"):
+        group = group.reset_index(drop=True)
+        if group.empty:
+            print(f"⚠️ Bỏ qua login {login_id} vì không có dữ liệu.")
+            continue
 
-            # 👉 Chuyển mỗi dict trong 'by_symbol' thành cột mới cùng hàng
+        try:
             expanded = group["by_symbol"].apply(pd.Series)
-            merged_df = pd.concat([group.drop(columns=["by_symbol"]), expanded], axis=1)
+        except Exception as e:
+            print(f"⚠️ Không thể phân tách 'by_symbol' cho login {login_id}: {e}")
+            continue
 
-            # 👉 Đổi tên cột nếu khớp với rename_map
-            renamed_df = merged_df.rename(columns=rename_map)
+        merged_df = pd.concat([group.drop(columns=["by_symbol"]), expanded], axis=1)
+        renamed_df = merged_df.rename(columns=rename_map)
+        if renamed_df.empty:
+            print(f"⚠️ Dữ liệu sau xử lý cho login {login_id} rỗng. Bỏ qua.")
+            continue
 
-            sheet_name = str(login_id)
-            renamed_df.to_excel(writer, sheet_name=sheet_name, index=False)
+        file_name = os.path.join(output_folder, f"{login_id}_{now.strftime('%Y%m%d_%H%M%S')}.xlsx")
+        try:
+            with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
+                sheet_name = "data"
+                renamed_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-            # 📏 Tự động điều chỉnh độ rộng cột
-            worksheet = writer.sheets[sheet_name]
-            for idx, col in enumerate(renamed_df.columns, 1):
-                try:
-                    max_len = renamed_df[col].apply(lambda x: len(str(x)) if pd.notna(x) else 0).max()
-                    adjusted_width = min(max(max_len, len(str(col))) + 2, 50)
-                    worksheet.column_dimensions[get_column_letter(idx)].width = adjusted_width
-                except Exception as e:
-                    print(f"⚠️ Lỗi khi xử lý cột {col}: {e}")
-                    worksheet.column_dimensions[get_column_letter(idx)].width = 20
+                worksheet = writer.sheets[sheet_name]
+                for idx, col in enumerate(renamed_df.columns, 1):
+                    try:
+                        max_len = renamed_df[col].apply(lambda x: len(str(x)) if pd.notna(x) else 0).max()
+                        adjusted_width = min(max(max_len, len(str(col))) + 2, 50)
+                        worksheet.column_dimensions[get_column_letter(idx)].width = adjusted_width
+                    except Exception as e:
+                        print(f"⚠️ Lỗi cột '{col}': {e}")
+                        worksheet.column_dimensions[get_column_letter(idx)].width = 20
 
-    # ======= TẠO FILE CSV =========
-    csv_file = "src/pnl_cache/pnl_log.csv"
+            print(f"✅ Đã ghi file: {file_name}")
+            generated_files.append(file_name)
+        except Exception as e:
+            print(f"❌ Lỗi khi ghi file {file_name}: {e}")
+
+    # === Ghi file CSV tổng (toàn bộ login) === 
+    csv_file = os.path.join("src/pnl_cache", "pnl_log.csv")
     df.to_csv(csv_file, index=False)
-    
-     # ======= ĐÍNH KÈM CẢ 2 FILE =========
-    file_list = [file_name, csv_file]
-    for file_path in file_list:
+    generated_files.append(csv_file)
+
+    # === Đính kèm tất cả file vào email ===
+    for file_path in generated_files:
         if os.path.exists(file_path):
             with open(file_path, 'rb') as f:
                 part = MIMEBase('application', 'octet-stream')
@@ -111,6 +132,7 @@ def send_email_with_attachment():
         else:
             print(f"⚠️ File không tồn tại: {file_path}")
 
+    # === Gửi email ===
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
@@ -121,9 +143,14 @@ def send_email_with_attachment():
     except Exception as e:
         print("❌ Lỗi khi gửi email:", e)
 
-    # (Tùy chọn) Xoá file tạm
-    if os.path.exists(file_name):
-        os.remove(file_name)
+    # === (Tùy chọn) Xoá các file .xlsx sinh ra ===
+    for file_path in generated_files:
+        if file_path.endswith(".xlsx"):
+            try:
+                os.remove(file_path)
+                print(f"🧹 Đã xoá file: {file_path}")
+            except Exception as e:
+                print(f"⚠️ Không thể xoá file {file_path}: {e}")
 
 # ========= LỊCH GỬI =========
 schedule.every().day.at(SEND_TIME).do(send_email_with_attachment)
