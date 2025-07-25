@@ -35,7 +35,8 @@ app.add_middleware(
 # Khởi tạo MT5 khi server khởi động
 @app.on_event("startup")
 async def startup_event():
-    await startup_mt5()
+    asyncio.create_task(startup_mt5()) 
+    # await startup_mt5()
 
 # Gắn route login
 app.include_router(auth_router)
