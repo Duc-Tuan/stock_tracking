@@ -2,7 +2,7 @@ import smtplib
 import schedule
 import os
 import json
-import asyncio
+import time
 
 import pandas as pd
 from datetime import datetime
@@ -71,6 +71,7 @@ Trân trọng."""
     output_folder = "exported_excels"
     os.makedirs(output_folder, exist_ok=True)
     generated_files = []
+    generated_files_delete = []
 
     # === Ghi từng file Excel ===
     for login_id, group in df.groupby("login"):
@@ -109,6 +110,7 @@ Trân trọng."""
 
             print(f"✅ Đã ghi file: {file_name}")
             generated_files.append(file_name)
+            generated_files_delete.append(file_name)
         except Exception as e:
             print(f"❌ Lỗi khi ghi file {file_name}: {e}")
 
@@ -144,7 +146,7 @@ Trân trọng."""
         print("❌ Lỗi khi gửi email:", e)
 
     # === (Tùy chọn) Xoá các file .xlsx sinh ra ===
-    for file_path in generated_files:
+    for file_path in generated_files_delete:
         if file_path.endswith(".xlsx"):
             try:
                 os.remove(file_path)
@@ -159,4 +161,4 @@ async def run_schedule_email():
     print(f"🕒 Script chạy, chờ gửi email mỗi ngày lúc {SEND_TIME}...")
     while True:
         schedule.run_pending()
-        await asyncio.sleep(60)
+        time.sleep(60)

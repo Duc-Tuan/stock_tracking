@@ -11,6 +11,10 @@ router = APIRouter()
 
 EXCEL_SOURCE = "src/pnl_cache/pnl_log.xlsx"
 
+# 📍 Thư mục lưu file tạm thời
+EXPORT_DIR = "exported_excels"
+os.makedirs(EXPORT_DIR, exist_ok=True)
+
 rename_map = {
     "login": "Tài khoản",
     "time": "Thời gian",
@@ -55,9 +59,11 @@ def download_excel(background_tasks: BackgroundTasks, current_user: dict = Depen
 
     df["by_symbol"] = df["by_symbol"].apply(parse_symbol)
 
+    # 📁 Tạo tên file tạm và đường dẫn đầy đủ
     file_name = f"pnl_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    file_path = os.path.join(EXPORT_DIR, file_name)
 
-    with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
         for login_id, group in df.groupby("login"):
             group = group.reset_index(drop=True)
 
@@ -83,10 +89,10 @@ def download_excel(background_tasks: BackgroundTasks, current_user: dict = Depen
                     worksheet.column_dimensions[get_column_letter(idx)].width = 20
 
     # 👉 Đăng ký xóa file sau khi response trả về
-    background_tasks.add_task(delete_file, file_name)
+    background_tasks.add_task(delete_file, file_path)
 
     return FileResponse(
-        path=file_name,
+        path=file_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=file_name
     )
