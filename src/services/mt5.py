@@ -1,5 +1,4 @@
 import MetaTrader5 as mt5
-# from src.controls.daily_email_sender import run_schedule_email
 from src.routes.savePnl import run_save_pnl
 import asyncio
 
@@ -7,4 +6,3 @@ import asyncio
 async def startup_mt5():
     # Bắt đầu background task
     asyncio.create_task(run_save_pnl())
-    # asyncio.create_task(run_schedule_email())

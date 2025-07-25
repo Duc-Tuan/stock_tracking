@@ -1,16 +1,21 @@
-import MetaTrader5 as mt5
 import os
 import time
-from datetime import datetime
 import multiprocessing
-import pandas as pd
 import json
+import asyncio
+import pandas as pd
+import MetaTrader5 as mt5
+
+from datetime import datetime
+from filelock import FileLock
+
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.model import SessionLocal
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from src.models.modelAccMt5 import AccountMt5
-import asyncio
+from src.controls.update_swap_mt5 import daily_swap_process
+from src.controls.daily_email_sender import run_schedule_email
 
 terminals = {
     "Acc1": "C:/Program Files/MetaTrader 5 - acc 1/terminal64.exe",
@@ -66,42 +71,38 @@ def monitor_account(mt5_path, account_name, interval, queue):
 
 def logger_process(queue: multiprocessing.Queue, csv_path="src/pnl_cache/pnl_log.csv", excel_path="src/pnl_cache/pnl_log.xlsx"):
     os.makedirs("src/pnl_cache", exist_ok=True)
+    lock = FileLock(excel_path + ".lock")
 
     while True:
-        data = queue.get()  # chặn đến khi có dữ liệu
+        data = queue.get()
         df = pd.DataFrame([data])
 
+        # Ghi CSV như bình thường
         if not os.path.exists(csv_path):
             df.to_csv(csv_path, index=False)
         else:
             df.to_csv(csv_path, mode="a", header=False, index=False)
 
         try:
-            if not os.path.exists(excel_path):
-                # 👉 Tạo file mới nếu chưa có
-                wb = Workbook()
-                ws = wb.active
-                ws.append(list(data.keys()))  # Ghi header
-            else:
-                # 👉 Mở file có sẵn
-                wb = load_workbook(excel_path)
-                ws = wb.active
+            with lock:  # 👉 LOCK GHI FILE
+                if not os.path.exists(excel_path):
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.append(list(data.keys()))
+                else:
+                    wb = load_workbook(excel_path)
+                    ws = wb.active
 
-            # 👉 Ghi dữ liệu mới vào dòng tiếp theo
-            ws.append(list(data.values()))
+                ws.append(list(data.values()))
+                for i, column in enumerate(data.keys(), 1):
+                    col_letter = get_column_letter(i)
+                    max_length = max([len(str(cell.value)) for cell in ws[col_letter]] + [len(column)])
+                    ws.column_dimensions[col_letter].width = max_length + 2
 
-            # 👉 Tự động điều chỉnh độ rộng cột (tuỳ chọn)
-            for i, column in enumerate(data.keys(), 1):
-                col_letter = get_column_letter(i)
-                max_length = max(
-                    [len(str(cell.value)) for cell in ws[col_letter]] + [len(column)]
-                )
-                ws.column_dimensions[col_letter].width = max_length + 2
-
-            wb.save(excel_path)
+                wb.save(excel_path)
         except Exception as e:
             print(f"⚠️ Error writing Excel: {e}")
-
+ 
 def run_save_pnl_blocking():
     multiprocessing.freeze_support()
     queue = multiprocessing.Queue()
@@ -115,8 +116,19 @@ def run_save_pnl_blocking():
         p.start()
         processes.append(p)
 
+    # Tiến trình lưu swap mỗi ngày lúc 5h cho toàn bộ MT5
+    swap_proc = multiprocessing.Process(target=daily_swap_process, args=(terminals,))
+    swap_proc.start()
+    processes.append(swap_proc)
+
+    # Tiến trình gưi email mỗi ngày lúc 7h cho toàn bộ MT5
+    email_proc = multiprocessing.Process(target=run_schedule_email)
+    email_proc.start()
+    processes.append(email_proc)
+
     for p in processes:
         p.join()
+
     log_proc.join()
 
 async def run_save_pnl():

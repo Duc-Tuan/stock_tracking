@@ -3,14 +3,16 @@ import schedule
 import os
 import json
 import time
-
 import pandas as pd
+
 from datetime import datetime
-from openpyxl.utils import get_column_letter
+from filelock import FileLock
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from openpyxl.utils import get_column_letter
+
 from src.utils.options import SENDER_PASSWORD, SENDER_EMAIL, SEND_TIME
 
 # ======== CẤU HÌNH NGƯỜI GỬI & NGƯỜI NHẬN =========
@@ -41,8 +43,24 @@ def parse_symbol(s):
     except:
         return {}
 
+def wait_until_file_ready(path, timeout=15, check_interval=1):
+    """Chờ cho đến khi file ngừng thay đổi kích thước trong khoảng thời gian nhất định."""
+    start = time.time()
+    prev_size = -1
+    while time.time() - start < timeout:
+        if not os.path.exists(path):
+            time.sleep(check_interval)
+            continue
+        size = os.path.getsize(path)
+        if size == prev_size and size > 0:
+            return True
+        prev_size = size
+        time.sleep(check_interval)
+    return False
+
 def send_email_with_attachment():
     print("📤 Đang gửi email...")
+    lock = FileLock(ATTACHMENT_PATH + ".lock")
 
     # === Chuẩn bị email ===
     msg = MIMEMultipart()
@@ -60,6 +78,10 @@ Trân trọng."""
 
     # === Đọc dữ liệu gốc ===
     try:
+        with lock:  # 👉 LOCK ĐỌC FILE
+            if not wait_until_file_ready(ATTACHMENT_PATH):
+                raise RuntimeError("⛔ File Excel chưa sẵn sàng hoặc đang bị khoá.")
+            df = pd.read_excel(ATTACHMENT_PATH)
         df = pd.read_excel(ATTACHMENT_PATH)
     except Exception as e:
         raise RuntimeError(f"Lỗi đọc file Excel gốc: {e}")

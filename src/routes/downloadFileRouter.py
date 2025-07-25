@@ -1,11 +1,14 @@
-import pandas as pd
-from fastapi.responses import FileResponse
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from datetime import datetime
-from src.controls.authControll import get_current_user
-from openpyxl.utils import get_column_letter
 import json
 import os
+import pandas as pd
+
+from filelock import FileLock
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from datetime import datetime
+from fastapi.responses import FileResponse
+from openpyxl.utils import get_column_letter
+
+from src.controls.authControll import get_current_user
 
 router = APIRouter()
 
@@ -51,9 +54,13 @@ def parse_symbol(s):
 def download_excel(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     if str(current_user.role) != "UserRole.admin":
         raise HTTPException(status_code=403, detail="Bạn không có quyền tải file")
+    
+    # 🔒 LOCK FILE TRƯỚC KHI ĐỌC
+    lock = FileLock(EXCEL_SOURCE + ".lock")
 
     try:
-        df = pd.read_excel(EXCEL_SOURCE)
+        with lock:
+            df = pd.read_excel(EXCEL_SOURCE)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi đọc file Excel gốc: {e}")
 
