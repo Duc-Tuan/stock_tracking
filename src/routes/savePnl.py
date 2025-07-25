@@ -14,8 +14,6 @@ from src.models.model import SessionLocal
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from src.models.modelAccMt5 import AccountMt5
-from src.controls.update_swap_mt5 import daily_swap_process
-from src.controls.daily_email_sender import run_schedule_email
 
 terminals = {
     "Acc1": "C:/Program Files/MetaTrader 5 - acc 1/terminal64.exe",
@@ -102,35 +100,3 @@ def logger_process(queue: multiprocessing.Queue, csv_path="src/pnl_cache/pnl_log
                 wb.save(excel_path)
         except Exception as e:
             print(f"⚠️ Error writing Excel: {e}")
- 
-def run_save_pnl_blocking():
-    multiprocessing.freeze_support()
-    queue = multiprocessing.Queue()
-
-    log_proc = multiprocessing.Process(target=logger_process, args=(queue,))
-    log_proc.start()
-
-    processes = []
-    for name, path in terminals.items():
-        p = multiprocessing.Process(target=monitor_account, args=(path, name, 10, queue))
-        p.start()
-        processes.append(p)
-
-    # Tiến trình lưu swap mỗi ngày lúc 5h cho toàn bộ MT5
-    swap_proc = multiprocessing.Process(target=daily_swap_process, args=(terminals,))
-    swap_proc.start()
-    processes.append(swap_proc)
-
-    # Tiến trình gưi email mỗi ngày lúc 7h cho toàn bộ MT5
-    email_proc = multiprocessing.Process(target=run_schedule_email)
-    email_proc.start()
-    processes.append(email_proc)
-
-    for p in processes:
-        p.join()
-
-    log_proc.join()
-
-async def run_save_pnl():
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, run_save_pnl_blocking)

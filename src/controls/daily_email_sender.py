@@ -12,6 +12,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from openpyxl.utils import get_column_letter
+from schedule import Scheduler
 
 from src.utils.options import SENDER_PASSWORD, SENDER_EMAIL, SEND_TIME
 
@@ -179,7 +180,7 @@ Trân trọng."""
 # ========= LỊCH GỬI =========
 schedule.every().day.at(SEND_TIME).do(send_email_with_attachment)
 
-async def run_schedule_email():
+def run_schedule_email():
     print(f"🕒 Script chạy, chờ gửi email mỗi ngày lúc {SEND_TIME}...")
     while True:
         schedule.run_pending()

@@ -3,8 +3,7 @@ from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
 from src.models.modelSwapMt5 import SwapMt5
 from datetime import datetime, timedelta
-import schedule
-import asyncio
+from schedule import Scheduler
 import MetaTrader5 as mt5
 import time
 from src.utils.options import SEND_TIME_UPDATE_SWAP_SUMMER, SEND_TIME_UPDATE_SWAP_WINTER
@@ -43,7 +42,7 @@ def get_swap_time_str_vietnam():
         return SEND_TIME_UPDATE_SWAP_WINTER
 
 def daily_swap_process(terminals):
-
+    scheduler = Scheduler()  # ❗ Tạo lịch riêng
     def job():
         for name, path in terminals.items():
             if not mt5.initialize(path):
@@ -56,10 +55,10 @@ def daily_swap_process(terminals):
             mt5.shutdown()
 
     SEND_TIME_UPDATE_SWAP = get_swap_time_str_vietnam()
-    schedule.every().day.at(SEND_TIME_UPDATE_SWAP).do(job)
+    scheduler.every().day.at(SEND_TIME_UPDATE_SWAP).do(job)
 
     print(f"🕒 daily_swap_process: Sẽ chạy lúc {SEND_TIME_UPDATE_SWAP} sáng mỗi ngày...")
 
     while True:
-        schedule.run_pending()
+        scheduler.run_pending()
         time.sleep(60)

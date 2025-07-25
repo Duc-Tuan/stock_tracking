@@ -7,7 +7,6 @@ from src.routes.authRouter import router as auth_router
 from src.routes.accMt5Router import router as auth_mt5_router
 from src.routes.downloadFileRouter import router as download_router
 from src.routes.symbolRouter import router as symbol_router
-from src.services.mt5 import startup_mt5
 import socketio
 from src.routes.wsRouter import websocket_pnl_io
 from fastapi.encoders import jsonable_encoder
@@ -32,12 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Khởi tạo MT5 khi server khởi động
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(startup_mt5()) 
-    # await startup_mt5()
-
 # Gắn route login
 app.include_router(auth_router)
 
@@ -47,8 +40,6 @@ app.include_router(auth_mt5_router)
 # Gắn route download file
 app.include_router(download_router)
 
-# ws/pnl WebSocket
-# app.include_router(ws_router)
 # Import sau khi tạo sio để tránh circular import
 @sio.event
 async def connect(sid, data):
