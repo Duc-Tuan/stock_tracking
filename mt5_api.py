@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from datetime import datetime
 
 from src.models.model import Base, engine
 from src.routes.authRouter import router as auth_router
@@ -12,6 +13,7 @@ from src.routes.wsRouter import websocket_pnl_io
 from fastapi.encoders import jsonable_encoder
 import asyncio
 from urllib.parse import parse_qs
+from src.utils.stop import stopDef
 
 # Tạo server Socket.IO
 sio = socketio.AsyncServer(cors_allowed_origins='*', async_mode='asgi')
@@ -58,7 +60,11 @@ async def connect(sid, environ):
 
 async def send_data_periodically(sid, symbol_id, token):
     while True:
-        await asyncio.sleep(10)
+        if stopDef(datetime.now()):
+            await asyncio.sleep(60)
+            continue
+
+        await asyncio.sleep(5)
         dataNew = websocket_pnl_io(symbol_id, token)
         await sio.emit('chat_message', jsonable_encoder(dataNew), to=sid)
 
