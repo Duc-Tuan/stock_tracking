@@ -21,22 +21,22 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     if not user:
         raise HTTPException(status_code=401, detail="Sai username hoặc password")
     
-    # Kiểm tra thiết bị đã tồn tại chưa
-    existing_token = db.query(UserToken).filter(
-        UserToken.user_id == user.id,
-        UserToken.device_id == device_id
-    ).first()
+    # # Kiểm tra thiết bị đã tồn tại chưa
+    # existing_token = db.query(UserToken).filter(
+    #     UserToken.user_id == user.id,
+    #     UserToken.device_id == device_id
+    # ).first()
 
-    if existing_token:
-        # Nếu đã có thiết bị này, xóa token cũ (nó có thể đã mất ở client)
-        db.delete(existing_token)
-        db.commit()
+    # if existing_token:
+    #     # Nếu đã có thiết bị này, xóa token cũ (nó có thể đã mất ở client)
+    #     db.delete(existing_token)
+    #     db.commit()
 
-    # Kiểm tra số thiết bị còn lại (sau khi loại device hiện tại nếu có)
-    active_tokens = db.query(UserToken).filter(UserToken.user_id == user.id).all()
+    # # Kiểm tra số thiết bị còn lại (sau khi loại device hiện tại nếu có)
+    # active_tokens = db.query(UserToken).filter(UserToken.user_id == user.id).all()
 
-    if len(active_tokens) >= 2:
-        raise HTTPException(status_code=403, detail="Chỉ được đăng nhập trên tối đa 2 thiết bị.")
+    # if len(active_tokens) >= 2:
+    #     raise HTTPException(status_code=403, detail="Chỉ được đăng nhập trên tối đa 2 thiết bị.")
 
     # Tạo access token mới
     access_token = create_access_token(
@@ -45,9 +45,9 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     )
 
     # Lưu vào DB
-    db_token = UserToken(user_id=user.id, token=access_token, device_id=device_id)
-    db.add(db_token)
-    db.commit()
+    # db_token = UserToken(user_id=user.id, token=access_token, device_id=device_id)
+    # db.add(db_token)
+    # db.commit()
 
     return {"access_token": access_token, "token_type": "bearer", "deviceId": device_id}
 
@@ -64,7 +64,11 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
 # ✅ Route được bảo vệ
 @router.get("/me")
 def read_me(current_user: dict = Depends(get_current_user)):
+    role = 404
+    if (str(current_user.role) == "UserRole.admin"):
+        role = 200
     return {
         "id": current_user.id,
-        "username": current_user.username
+        "username": current_user.username,
+        "role": role
     }
