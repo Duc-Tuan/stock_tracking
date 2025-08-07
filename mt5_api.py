@@ -13,6 +13,7 @@ from src.models.modelTransaction.deal_transaction_model import DealTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.priceTick_transaction_model import PriceTickTransaction
+from src.models.modelSwapMt5 import SwapMt5
 
 from src.models.model import Base, engine
 from src.routes.authRouter import router as auth_router

@@ -1,27 +1,20 @@
+import MetaTrader5 as mt5
 import os
 import time
-import multiprocessing
-import json
-import pandas as pd
-import MetaTrader5 as mt5
-
 from datetime import datetime, timedelta, time as dtime
-from filelock import FileLock
-
+from src.models.modelSwapMt5 import SwapMt5
+import multiprocessing
+import pandas as pd
+import json
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.model import SessionLocal
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from src.models.modelAccMt5 import AccountMt5
-from src.models.modelSwapMt5 import SwapMt5
 from src.utils.stop import stopDef
+from filelock import FileLock
 from openpyxl.utils.exceptions import InvalidFileException
 import zipfile
-
-terminals = {
-    "Acc1": "C:/Program Files/MetaTrader 5 - acc 1/terminal64.exe",
-    "Acc2": "C:/Program Files/MetaTrader 5 - acc 2/terminal64.exe",
-}
 
 def swap_difference(db, account_info):
     def get_log_for_day(day_date):
@@ -54,7 +47,6 @@ def swap_difference(db, account_info):
         return today_log.swap - yesterday_log.swap
 
     return 0
-
 
 def monitor_account(mt5_path, account_name, interval, queue, stop_event):
     db = SessionLocal()

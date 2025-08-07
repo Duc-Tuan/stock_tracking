@@ -4,6 +4,7 @@ from src.models.modelAccMt5 import AccountMt5
 from src.models.modelSwapMt5 import SwapMt5
 from datetime import datetime, timedelta
 from schedule import Scheduler
+import asyncio
 import MetaTrader5 as mt5
 import time
 from src.utils.options import SEND_TIME_UPDATE_SWAP_SUMMER, SEND_TIME_UPDATE_SWAP_WINTER
@@ -42,23 +43,42 @@ def get_swap_time_str_vietnam():
         return SEND_TIME_UPDATE_SWAP_WINTER
 
 def daily_swap_process(terminals):
-    scheduler = Scheduler()  # ❗ Tạo lịch riêng
     def job():
         for name, path in terminals.items():
             if not mt5.initialize(path):
                 print(f"⚠️ Không khởi tạo được MT5: {path}")
                 continue
+
             account_info = mt5.account_info()
             positions = mt5.positions_get()
-            if account_info and positions:
+
+            if account_info is None:
+                print(f"[{name}] ❌ Không lấy được account_info")
+            elif not positions:
+                print(f"[{name}] ⚠️ Không có lệnh mở (positions) tại {datetime.now()}")
+            else:
                 update_swap_mt5(positions, account_info)
+
             mt5.shutdown()
 
     SEND_TIME_UPDATE_SWAP = get_swap_time_str_vietnam()
-    scheduler.every().day.at(SEND_TIME_UPDATE_SWAP).do(job)
-
     print(f"🕒 daily_swap_process: Sẽ chạy lúc {SEND_TIME_UPDATE_SWAP} sáng mỗi ngày...")
 
-    while True:
-        scheduler.run_pending()
-        time.sleep(60)
+    sent_today = False
+
+    try:
+        while True:
+            now = datetime.now()
+            current_time_str = now.strftime("%H:%M")
+
+            if current_time_str == SEND_TIME_UPDATE_SWAP and not sent_today:
+                print(f"⏰ Đến giờ chạy SWAP ({current_time_str})")
+                job()
+                sent_today = True
+
+            elif current_time_str != SEND_TIME_UPDATE_SWAP:
+                sent_today = False  # Reset cờ khi qua phút
+
+            time.sleep(1)  # kiểm tra mỗi giây
+    except KeyboardInterrupt:
+        print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")

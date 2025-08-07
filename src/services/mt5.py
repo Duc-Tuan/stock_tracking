@@ -59,6 +59,9 @@ def start_mt5_monitor():
                 p.terminate()
         print("✅ Dừng toàn bộ tiến trình thành công.")
 
+    
+
+
 if __name__ == "__main__":
     try:
         start_mt5_monitor()

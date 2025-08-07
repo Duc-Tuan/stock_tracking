@@ -3,18 +3,16 @@ import schedule
 import os
 import json
 import time
-import pandas as pd
 
+import pandas as pd
 from datetime import datetime
-from filelock import FileLock
+from openpyxl.utils import get_column_letter
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from openpyxl.utils import get_column_letter
-from schedule import Scheduler
-
 from src.utils.options import SENDER_PASSWORD, SENDER_EMAIL, SEND_TIME
+from filelock import FileLock
 
 # ======== CẤU HÌNH NGƯỜI GỬI & NGƯỜI NHẬN =========
 RECEIVER_EMAIL = ["testsendpymt5@gmail.com", "thaisanchezvn@gmail.com"]  # Hoặc danh sách: ["a@a.com", "b@b.com"]
@@ -43,6 +41,7 @@ def parse_symbol(s):
         return {}
     except:
         return {}
+    
 
 def wait_until_file_ready(path, timeout=15, check_interval=1):
     """Chờ cho đến khi file ngừng thay đổi kích thước trong khoảng thời gian nhất định."""
@@ -79,11 +78,11 @@ Trân trọng."""
 
     # === Đọc dữ liệu gốc ===
     try:
+        print("⏳ Chờ file ghi xong...")
         with lock:  # 👉 LOCK ĐỌC FILE
             if not wait_until_file_ready(ATTACHMENT_PATH):
                 raise RuntimeError("⛔ File Excel chưa sẵn sàng hoặc đang bị khoá.")
             df = pd.read_excel(ATTACHMENT_PATH)
-        df = pd.read_excel(ATTACHMENT_PATH)
     except Exception as e:
         raise RuntimeError(f"Lỗi đọc file Excel gốc: {e}")
 
@@ -182,6 +181,9 @@ schedule.every().day.at(SEND_TIME).do(send_email_with_attachment)
 
 def run_schedule_email():
     print(f"🕒 Script chạy, chờ gửi email mỗi ngày lúc {SEND_TIME}...")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except KeyboardInterrupt:
+        print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")
