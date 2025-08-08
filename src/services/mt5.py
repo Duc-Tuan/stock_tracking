@@ -33,7 +33,7 @@ def start_mt5_monitor():
         # Chạy tiến trình theo dõi PNL
         processes = []
         for name, path in terminals.items():
-            p = Process(target=monitor_account, args=(path, name, 5, queue, stop_event))
+            p = Process(target=monitor_account, args=(path, name, 1, queue, stop_event))
             p.start()
             processes.append(p)
 

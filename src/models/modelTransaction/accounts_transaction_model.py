@@ -2,9 +2,10 @@ from sqlalchemy import Column, Integer, String, Float
 from src.models.model import Base, relationship
 
 class AccountsTransaction(Base):
-    __tablename__ = "accounts_transaction"
+    __tablename__ = "accounts_transaction" # Tài khoản giao dịch trên MT5
 
     id = Column(Integer, primary_key=True)
+    username = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     balance = Column(Float, default=0)
     equity = Column(Float, default=0)

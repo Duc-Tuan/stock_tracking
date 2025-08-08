@@ -4,6 +4,7 @@ from src.models.model import Base, relationship
 class SymbolTransaction(Base):
     __tablename__ = "symbol_transaction"
 
+    id = Column(Integer, primary_key=True)
     symbol = Column(String, primary_key=True)
     description = Column(String)
     digits = Column(Integer, nullable=False)
