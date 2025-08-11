@@ -40,6 +40,7 @@ def websocket_pnl_io(id_symbol: int = "", token: str = ""):
         return {
             "time": data.time,
             "total_pnl": data.total_pnl,
+            "by_symbol": data.by_symbol,
         }
     except Exception as e:
         print("❌ Lỗi lưu DB:", e)

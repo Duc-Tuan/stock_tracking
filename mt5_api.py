@@ -3,9 +3,9 @@ import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from datetime import datetime
 from urllib.parse import parse_qs
 from fastapi.encoders import jsonable_encoder
+from collections import defaultdict
 
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
@@ -51,45 +51,47 @@ app.include_router(symbol_router)
 app.include_router(trading_router)
 
 # Tạo server socket.io
-sio = socketio.AsyncServer(cors_allowed_origins='*', async_mode='asgi')
+sio = socketio.AsyncServer(cors_allowed_origins='*', async_mode='asgi', compression=True)
 
-# Lưu task theo client ID
-active_tasks = {}
 
-# Gửi data định kỳ
-async def send_data_periodically(sid, symbol_id, token):
+symbol_clients = defaultdict(set)
+symbol_last_data = {}
+symbol_tasks = {}
+
+async def broadcast_symbol_data(symbol_id, token):
     try:
         while True:
-            if stopDef(datetime.now()):
-                await asyncio.sleep(60)
-                continue
-
-            await asyncio.sleep(5)
             try:
-                dataNew = await asyncio.wait_for(
-                    asyncio.to_thread(websocket_pnl_io, symbol_id, token),
-                    timeout=3.0
-                )
-                await sio.emit('chat_message', jsonable_encoder(dataNew), to=sid)
+                data = await asyncio.to_thread(websocket_pnl_io, symbol_id, token)
+                symbol_last_data[symbol_id] = data
+                for sid in list(symbol_clients[symbol_id]):
+                    await sio.emit('chat_message', jsonable_encoder(data), to=sid)
             except Exception as e:
-                print(f"[ERROR] send_data_periodically: {e}")
-
+                print(f"[ERROR] broadcast_symbol_data: {e}")
+            await asyncio.sleep(1)
     except asyncio.CancelledError:
-        print(f"⛔ Task for sid={sid} cancelled")
+        print(f"⛔ Task for symbol {symbol_id} cancelled")
 
 @sio.event
 async def connect(sid, environ):
-    print(f"✅ Client connected: {sid}")
-    query_params = parse_qs(environ.get('QUERY_STRING', ''))
-    symbol_id = query_params.get('symbol_id', [None])[0]
-    token = query_params.get('token', [None])[0]
-
-    task = sio.start_background_task(send_data_periodically, sid, symbol_id, token)
-    active_tasks[sid] = task
+    query = parse_qs(environ.get('QUERY_STRING', ''))
+    symbol_id = query.get('symbol_id', [None])[0]
+    token = query.get('token', [None])[0]
+    
+    symbol_clients[symbol_id].add(sid)
+    
+    if symbol_id not in symbol_tasks:
+        print(f"🚀 Starting task for symbol {symbol_id}")
+        symbol_tasks[symbol_id] = asyncio.create_task(broadcast_symbol_data(symbol_id, token))
 
 @sio.event
 async def disconnect(sid):
     print(f"❌ Client disconnected: {sid}")
-    task = active_tasks.pop(sid, None)
-    if task:
-        task.cancel()
+    for symbol_id, clients in list(symbol_clients.items()):
+        if sid in clients:
+            clients.remove(sid)
+            if not clients:
+                print(f"🛑 Stopping task for symbol {symbol_id}")
+                task = symbol_tasks.pop(symbol_id, None)
+                if task:
+                    task.cancel()
