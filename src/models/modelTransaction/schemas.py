@@ -54,3 +54,19 @@ class OrderItem(BaseModel):
 
 class OrderRequest(BaseModel):
     orders: List[OrderItem]
+
+class symbolItem(BaseModel):
+    current_price: float
+    symbol: str
+    type: str
+
+class SymbolTransactionRequest(BaseModel):
+    account_monitor_id: float
+    account_transaction_id: float
+    price: float
+    volume: float
+    stop_loss: float
+    take_profit: float
+    status: Literal["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"]
+    type: Literal["CLOSE", "RUNNING"]
+    by_symbol:  List[symbolItem]

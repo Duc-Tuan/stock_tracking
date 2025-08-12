@@ -16,3 +16,5 @@ class AccountsTransaction(Base):
     orders = relationship("OrdersTransaction", back_populates="account")
     positions = relationship("PositionTransaction", back_populates="account")
     deals = relationship("DealTransaction", back_populates="account")
+    lotaccount = relationship("LotInformation", back_populates="account")
+    symbol_rel = relationship("SymbolTransaction", back_populates="account")

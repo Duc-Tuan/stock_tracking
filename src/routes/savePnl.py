@@ -50,7 +50,6 @@ def swap_difference(db, account_info):
     return 0
 
 def monitor_account(mt5_path, account_name, interval, queue, stop_event):
-    db = SessionLocal()
     if not mt5.initialize(path=mt5_path):
         print(f"[{account_name}] ❌ Cannot initialize MT5 at {mt5_path}")
         time.sleep(interval)
@@ -61,6 +60,9 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                 print("⏸️ StopDef active: Dừng ghi log và theo dõi PnL vào thời điểm hiện tại")
                 time.sleep(60)
                 continue
+
+            db = SessionLocal()
+            
             try:
                 account_info = mt5.account_info()
                 positions = mt5.positions_get()
@@ -121,6 +123,7 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                     queue.put(data)  # 👉 gửi về process ghi log
                     print(f"✅ Đã ghi PnL {account_info.login}: giá chưa tính swap {account_info.profit}, giá đã tính swap {total_pnl} với {num_positions} lệnh, swap chênh lệch: {total_swap_difference}", f'info: {symbol_pnls}')
             except Exception as e:
+                db.rollback()
                 print(f"[{account_name}] ❌ Lỗi trong monitor_account: {e}")
             finally:
                 time.sleep(interval)

@@ -13,3 +13,4 @@ cryptography
 openpyxl
 schedule
 python-socketio
+httptools

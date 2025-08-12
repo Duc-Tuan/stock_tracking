@@ -14,7 +14,7 @@ class OrdersTransaction(Base):
     sl = Column(Float) # Mức dừng lỗ (Stop Loss)
     tp = Column(Float) # Mức chốt lời (Take Profit)
     time = Column(DateTime, default=datetime.utcnow)
-    status = Column(Enum('pending', 'filled', 'cancelled', 'rejected'), default='pending')  # 'pending', 'executed', 'cancelled'
+    status = Column(Enum('pending', 'filled', 'cancelled', 'rejected'), default='pending')
 
     account = relationship("AccountsTransaction", back_populates="orders")
     symbol_rel = relationship("SymbolTransaction", back_populates="orders")

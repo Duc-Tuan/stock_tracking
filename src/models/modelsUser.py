@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Enum
-from src.models.model import Base
+from src.models.model import Base, relationship
 import enum
 
 class UserRole(enum.Enum):
@@ -14,3 +14,5 @@ class UserModel(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     role = Column(Enum(UserRole), nullable=False)
+
+    symbol_rel = relationship("SymbolTransaction", back_populates="user")
