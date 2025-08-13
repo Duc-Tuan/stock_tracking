@@ -30,10 +30,7 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
     tick = mt5.symbol_info_tick(symbol)
     if tick is None:
         raise Exception(f"Không lấy được giá cho symbol: {symbol}")
-
-    # ask = tick.ask
-    # bid = tick.bid
-
+    
     # Chuyển order_type từ chuỗi sang mã lệnh MT5
     order_type_map = {
         "BUY": ORDER_TYPE_BUY,
@@ -45,13 +42,6 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
 
     mt5_order_type = order_type_map[order_type]
 
-    # Xác định giá gửi lệnh phù hợp
-    # if "BUY" in order_type:
-    #     price = ask
-    # else:
-    #     price = bid
-
-    # Nếu là lệnh chờ → TRADE_ACTION_PENDING, còn lại là DEAL
     action_type = TRADE_ACTION_DEAL if order_type in ["BUY", "SELL"] else TRADE_ACTION_PENDING
 
     request = {
@@ -127,6 +117,7 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
     db = SessionLocal()
 
     lotNew = LotInformation(
+        username_id=username_id,
         account_monitor_id=data.account_monitor_id,
         account_transaction_id=data.account_transaction_id,
         price=data.price,
@@ -134,7 +125,8 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
         stop_loss=data.stop_loss,
         take_profit=data.take_profit,
         status=data.status,
-        type=data.type
+        type=data.type,
+        status_sl_tp=data.status_sl_tp
     )
     db.add(lotNew)
     db.commit()
@@ -156,7 +148,7 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
                 symbol=by_symbol.symbol,
                 price_transaction=by_symbol.current_price,
                 volume=data.volume,
-                type=data.type,
+                type=by_symbol.type,
                 digits=0
             )
             db.add(symbol)

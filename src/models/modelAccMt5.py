@@ -11,4 +11,6 @@ class AccountMt5(Base):
     server = Column(String)
     by_symbol = Column(String)
 
-    lotaccount = relationship("LotInformation", back_populates="accMt5")
+    account = relationship("AccountsTransaction", back_populates="monitor_account_mt5")
+
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction

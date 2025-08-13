@@ -12,3 +12,6 @@ class PriceTickTransaction(Base):
     time = Column(DateTime, default=datetime.utcnow)
 
     symbol_rel = relationship("SymbolTransaction", back_populates="ticks")
+
+from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+

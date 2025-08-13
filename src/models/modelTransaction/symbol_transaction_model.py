@@ -33,3 +33,10 @@ class SymbolTransaction(Base):
     lotaccount = relationship("LotInformation", back_populates="symbol_rel")
     account = relationship("AccountsTransaction", back_populates="symbol_rel")
     user = relationship("UserModel", back_populates="symbol_rel")
+
+from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
+from src.models.modelTransaction.position_transaction_model import PositionTransaction
+from src.models.modelTransaction.deal_transaction_model import DealTransaction
+from src.models.modelTransaction.lot_information_model import LotInformation
+from src.models.modelTransaction.priceTick_transaction_model import PriceTickTransaction
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction

@@ -70,3 +70,4 @@ class SymbolTransactionRequest(BaseModel):
     status: Literal["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"]
     type: Literal["CLOSE", "RUNNING"]
     by_symbol:  List[symbolItem]
+    status_sl_tp: Literal["Xuoi", "Nguoc"]

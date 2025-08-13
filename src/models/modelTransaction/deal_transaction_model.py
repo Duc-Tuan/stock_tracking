@@ -21,3 +21,6 @@ class DealTransaction(Base):
 
     account = relationship("AccountsTransaction", back_populates="deals")
     symbol_rel = relationship("SymbolTransaction", back_populates="deals")
+
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction

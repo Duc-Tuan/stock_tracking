@@ -7,15 +7,6 @@ from urllib.parse import parse_qs
 from fastapi.encoders import jsonable_encoder
 from collections import defaultdict
 
-from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
-from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
-from src.models.modelTransaction.deal_transaction_model import DealTransaction
-from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
-from src.models.modelTransaction.position_transaction_model import PositionTransaction
-from src.models.modelTransaction.priceTick_transaction_model import PriceTickTransaction
-from src.models.modelTransaction.lot_information_model import LotInformation
-from src.models.modelSwapMt5 import SwapMt5
-
 from src.models.model import Base, engine
 from src.routes.authRouter import router as auth_router
 from src.routes.accMt5Router import router as auth_mt5_router
@@ -29,6 +20,7 @@ from src.routes.wsRouter import websocket_pnl_io
 load_dotenv()
 
 # SQLAlchemy init
+from src.models.modelTransaction import *
 Base.metadata.create_all(bind=engine)
 
 # Tạo FastAPI app

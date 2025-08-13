@@ -16,3 +16,6 @@ class UserModel(Base):
     role = Column(Enum(UserRole), nullable=False)
 
     symbol_rel = relationship("SymbolTransaction", back_populates="user")
+    lotaccount = relationship("LotInformation", back_populates="user")
+
+from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
