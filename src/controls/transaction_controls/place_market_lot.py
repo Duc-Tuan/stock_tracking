@@ -1,6 +1,7 @@
 from src.models.modelTransaction.schemas import SymbolTransactionRequest
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
 
@@ -77,9 +78,24 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             digits = symbol_info.digits,
             contract_size = symbol_info.trade_contract_size,
             description= f"python-{symbol}",
-            profit = profit
+            profit = profit,
+            status = 'filled'
         )
         db.add(symbol)
+
+        order_transaction = OrdersTransaction(
+            id_transaction= ticket_id,
+            account_id = account_transaction_id,
+            symbol = symbol,
+            order_type = order_type,
+            volume = lot,
+            price = price,
+            sl = 0,
+            tp = 0,
+            status = 'filled'
+        )
+        db.add(order_transaction)
+
         db.commit()
         db.close()
         print("✅ Lệnh đã gửi:", result)
@@ -152,5 +168,16 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
                 digits=0
             )
             db.add(symbol)
+
+            order_transaction = OrdersTransaction(
+                account_id = data.account_transaction_id,
+                symbol = by_symbol.symbol,
+                order_type = by_symbol.type,
+                volume = lotNew.id,
+                price = by_symbol.current_price,
+                sl = 0,
+                tp = 0,
+            )
+            db.add(order_transaction)
         db.commit()
         db.close()

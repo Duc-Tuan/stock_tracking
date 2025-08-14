@@ -5,6 +5,7 @@ from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from functools import partial
 import json
 import re
@@ -131,6 +132,7 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
     else:
         ticket_id = result.order
         db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol, "id_transaction": ticket_id})
+        db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id})
         db.commit()
         db.close()
         print("✅ Lệnh đã gửi:", result)

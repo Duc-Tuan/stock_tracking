@@ -6,6 +6,7 @@ class DealTransaction(Base):
     __tablename__ = "deal_transaction" # Lưu thông tin giao dịch đã thực hiện
 
     id = Column(Integer, primary_key=True)
+    username_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("accounts_transaction.username"), nullable=False)
     symbol = Column(String, ForeignKey("symbol_transaction.symbol"), nullable=False)
     position_type = Column(String, nullable=False) #Loại vị thế: buy hoặc sell
@@ -21,6 +22,8 @@ class DealTransaction(Base):
 
     account = relationship("AccountsTransaction", back_populates="deals")
     symbol_rel = relationship("SymbolTransaction", back_populates="deals")
+    user = relationship("UserModel", back_populates="deals")
 
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelsUser import UserModel

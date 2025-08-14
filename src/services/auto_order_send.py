@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 import signal
 from multiprocessing import Process, Queue, freeze_support,Event
 from src.controls.transaction_controls.auto_order import transaction_account_order
+from src.controls.transaction_controls.auto_position_transaction import auto_position
 
 terminals = {
     "Acc1": "C:/Program Files/MetaTrader 5/terminal64.exe",
@@ -22,12 +23,16 @@ def start_mt5_monitor():
         signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
 
-        # Chạy tiến trình theo dõi PNL
+        # Chạy tiến trình theo dõi PNL để vào lệnh và đóng lệnh
         processes = []
         for name, path in terminals.items():
-            p = Process(target=transaction_account_order, args=(path, name, 1, stop_event))
-            p.start()
-            processes.append(p)
+            p1 = Process(target=transaction_account_order, args=(path, name, 1, stop_event))
+            p1.start()
+            processes.append(p1)
+
+            p2 = Process(target=auto_position, args=(path, name, 1, stop_event))
+            p2.start()
+            processes.append(p2)
 
         for p in processes:
             p.join()
