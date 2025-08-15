@@ -27,17 +27,22 @@ def create_acc_mt5_controll(payload: RegisterRequestAccMt5,db, current_user):
         raise HTTPException(status_code=400, detail="Đăng nhập thất bại")
 
 def get_acc_mt5_controll(db, username: str):
-    user = get_user(db, username)
-    if not user:
-        return False
-    existing = db.query(AccountMt5).filter(AccountMt5.loginId == user.id).all()
+    try:
+        user = get_user(db, username)
+        if not user:
+            return False
+        existing = db.query(AccountMt5).filter(AccountMt5.loginId == user.id).all()
 
-    result = []
-    for row in existing:
-        row_dict = row.__dict__.copy()
-        row_dict.pop("_sa_instance_state", None)
-        row_dict.pop("password", None)  # bỏ trường login nếu cần
-        row_dict.pop("loginId", None)  # bỏ trường login nếu cần
-        result.append(row_dict)
+        result = []
+        for row in existing:
+            row_dict = row.__dict__.copy()
+            row_dict.pop("_sa_instance_state", None)
+            row_dict.pop("password", None)  # bỏ trường login nếu cần
+            row_dict.pop("loginId", None)  # bỏ trường login nếu cần
+            result.append(row_dict)
 
-    return result
+        return result
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()

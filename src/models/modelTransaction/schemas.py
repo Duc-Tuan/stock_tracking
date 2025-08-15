@@ -71,3 +71,17 @@ class SymbolTransactionRequest(BaseModel):
     type: Literal["CLOSE", "RUNNING"]
     by_symbol:  List[symbolItem]
     status_sl_tp: Literal["Xuoi", "Nguoc"]
+
+class CloseFastLotItem(BaseModel):
+    id: int
+
+class CloseFastLotRequest(BaseModel):
+    data: List[CloseFastLotItem]
+
+class getLots(BaseModel):
+    start_time: int
+    end_time: int
+    status: Literal["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"]
+    acc_transaction: int
+    page: int
+    limit: int

@@ -14,6 +14,10 @@ from src.routes.downloadFileRouter import router as download_router
 from src.routes.symbolRouter import router as symbol_router
 from src.routes.transaction.trading import router as trading_router
 from src.routes.transaction.lotTransaction import router as lot_router
+from src.routes.transaction.close_fast_lot import router as close_lot_router
+from src.routes.transaction.orderTransaction import router as order_close_router
+from src.routes.transaction.send_symbols_transaction import router as send_symbol_router
+from src.routes.transaction.position_transaction import router as position_transaction_router
 from src.routes.wsRouter import websocket_pnl_io
 
 # Load env
@@ -43,6 +47,10 @@ app.include_router(symbol_router)
 
 app.include_router(lot_router)
 app.include_router(trading_router)
+app.include_router(close_lot_router)
+app.include_router(order_close_router)
+app.include_router(send_symbol_router)
+app.include_router(position_transaction_router)
 
 # Tạo server socket.io
 sio = socketio.AsyncServer(cors_allowed_origins='*', async_mode='asgi', compression=False)

@@ -19,7 +19,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_user(db, username: str):
-    return db.query(UserModel).filter(UserModel.username == username).first()
+    try:
+        data = db.query(UserModel).filter(UserModel.username == username).first()
+        return data
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
 
 def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
@@ -30,13 +36,18 @@ def authenticate_user(db, username: str, password: str):
     return user
 
 def create_user(payload: RegisterRequest, db):
-    hashed_pw = hash_password(payload.password)
-    new_user = UserModel(username=payload.username, hashed_password=hashed_pw, role="viewer")
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        hashed_pw = hash_password(payload.password)
+        new_user = UserModel(username=payload.username, hashed_password=hashed_pw, role="viewer")
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    return new_user
+        return new_user
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
@@ -57,19 +68,29 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-
+    
     db = SessionLocal()
-    user = db.query(UserModel).filter(UserModel.username == username).first()
-    db.close()
-    if not user:
-        raise credentials_exception
-    return user  # user có user.role
+    try:
+        user = db.query(UserModel).filter(UserModel.username == username).first()
+        db.close()
+        if not user:
+            raise credentials_exception
+        return user  # user có user.role
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def def_create_acc_mt5(payload: RegisterRequestAccMt5, loginId, db):
-    hashed_pw = encrypt_password_mt5(payload.password)
-    new_data = AccountMt5(username=payload.username, password=hashed_pw, loginId=loginId, server=payload.server)
-    db.add(new_data)
-    db.commit()
-    db.refresh(new_data)
-    return new_data
+    try: 
+        hashed_pw = encrypt_password_mt5(payload.password)
+        new_data = AccountMt5(username=payload.username, password=hashed_pw, loginId=loginId, server=payload.server)
+        db.add(new_data)
+        db.commit()
+        db.refresh(new_data)
+        return new_data
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()

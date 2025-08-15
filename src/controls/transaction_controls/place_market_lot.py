@@ -4,6 +4,9 @@ from src.models.modelTransaction.symbol_transaction_model import SymbolTransacti
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
+from sqlalchemy import func
+from datetime import datetime
+import re
 
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
@@ -18,19 +21,32 @@ def get_floating_profit(ticket_id):
         return positions[0].profit
     return None
 
+# bỏ hậu tố
+def replace_suffix_with_m(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0) + "m"
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm") + "m"
+    
+
 def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
     db = SessionLocal()
 
-    symbol_info = mt5.symbol_info(symbol)
+    symbol_replace = replace_suffix_with_m(symbol)
+
+    symbol_info = mt5.symbol_info(symbol_replace)
     if symbol_info is None:
-        raise Exception(f"Không tìm thấy symbol: {symbol}")
+        raise Exception(f"Không tìm thấy symbol: {symbol_replace}")
 
     if not symbol_info.visible:
-        mt5.symbol_select(symbol, True)
+        mt5.symbol_select(symbol_replace, True)
 
-    tick = mt5.symbol_info_tick(symbol)
+    tick = mt5.symbol_info_tick(symbol_replace)
     if tick is None:
-        raise Exception(f"Không lấy được giá cho symbol: {symbol}")
+        raise Exception(f"Không lấy được giá cho symbol: {symbol_replace}")
     
     # Chuyển order_type từ chuỗi sang mã lệnh MT5
     order_type_map = {
@@ -47,7 +63,7 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
 
     request = {
         "action": action_type,
-        "symbol": symbol,
+        "symbol": symbol_replace,
         "volume": lot,
         "type": mt5_order_type,
         "price": price,
@@ -58,20 +74,18 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
         "type_filling": ORDER_FILLING_IOC,
     }
 
-    print("Request order_send:", request)
     result = mt5.order_send(request)
-    print("Result order_send:", result)
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
     else:
         ticket_id = result.order
         profit = get_floating_profit(result.order)
-        symbol = SymbolTransaction(
+        symbolSQL = SymbolTransaction(
             id_transaction= ticket_id,
             username_id = usename_id,
             lot_id = lot_id,
             account_transaction_id = account_transaction_id,
-            symbol = symbol,
+            symbol = symbol_replace,
             price_transaction = price,
             volume = lot,
             type = order_type,
@@ -81,12 +95,12 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             profit = profit,
             status = 'filled'
         )
-        db.add(symbol)
+        db.add(symbolSQL)
 
         order_transaction = OrdersTransaction(
             id_transaction= ticket_id,
             account_id = account_transaction_id,
-            symbol = symbol,
+            symbol = symbol_replace,
             order_type = order_type,
             volume = lot,
             price = price,
@@ -153,7 +167,6 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
             futures = [executor.submit(run_order, order, data, username_id, lotNew.id) for order in data.by_symbol]
             for future in as_completed(futures):
                 results.append(future.result())
-        db.close()
         return results
     else:
         for by_symbol in data.by_symbol:
@@ -180,4 +193,81 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
             )
             db.add(order_transaction)
         db.commit()
+        db.close()
+
+def get_symbols_lot(id_lot, id_user):
+    db = SessionLocal()
+    try:
+
+        rows = db.query(
+            SymbolTransaction.symbol,
+            SymbolTransaction.price_transaction,
+            SymbolTransaction.type).filter(SymbolTransaction.username_id == id_user, SymbolTransaction.lot_id == id_lot).order_by(SymbolTransaction.time.desc()).all()
+        
+        return [
+            {
+                "symbol": symbol,
+                "price_transaction": price_transaction,
+                "type": type
+            }
+            for symbol, price_transaction, type in rows
+        ]
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
+
+def get_symbols_db(data, id_user):
+    db = SessionLocal()
+    try:
+        offset = (data['page'] - 1) * data['limit']
+
+        query = db.query(LotInformation)
+
+        # Danh sách các điều kiện động
+        filters = [LotInformation.username_id == id_user]
+
+        if data['status'] is not None:
+            filters.append(LotInformation.status == data['status'])
+
+        if data['acc_transaction'] is not None:
+            filters.append(LotInformation.account_transaction_id == int(data['acc_transaction']))
+
+        if data['start_time'] is not None:
+            start_dt = datetime.fromtimestamp(int(data['start_time']) / 1000)
+            filters.append(LotInformation.time >= start_dt)
+
+        if data['end_time'] is not None:
+            end_dt = datetime.fromtimestamp(int(data['end_time']) / 1000)
+            filters.append(LotInformation.time <= end_dt)
+            
+
+        total = db.query(func.count(LotInformation.id)).filter(*filters).scalar()
+
+        dataLots = (
+            query.filter(*filters)
+            .order_by(LotInformation.time.desc())
+            .offset(offset)
+            .limit(data['limit'])
+            .all()
+        )
+
+        # 🔹 Chuyển sang list dict và thêm trường mới
+        result_data = []
+        for item in dataLots:
+            item_dict = item.__dict__.copy()
+            item_dict.pop("_sa_instance_state", None)  # bỏ metadata SQLAlchemy
+            # Ví dụ: thêm trường mới
+            item_dict["bySymbol"] = get_symbols_lot(item.id, id_user)
+            result_data.append(item_dict)
+
+        return {
+            "total": total,
+            "page": data['page'],
+            "limit": data['limit'],
+            "data": result_data
+        }
+    except Exception as e:
+        db.rollback()
+    finally:
         db.close()

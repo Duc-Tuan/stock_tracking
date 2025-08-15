@@ -283,7 +283,7 @@ def open_order_mt5(mt5_path, id_lot: int, priceCurrentSymbls):
 def nguoc_limit_xuoi_stop(item: LotInformation, account_monitor: int, mt5_path):
     # Với điều kiện PNL cao hơn PNL hiện tại, chờ giá giảm rồi bật lên
     data = pnl_monitor(account_monitor)
-    if (item.price >= data.total_pnl):
+    if (item.price <= data.total_pnl):
         try: 
             open_order_mt5(mt5_path, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
             update_type_lot(item.id)
@@ -294,7 +294,7 @@ def nguoc_limit_xuoi_stop(item: LotInformation, account_monitor: int, mt5_path):
 def xuoi__limit_nguoc_stop(item: LotInformation, account_monitor: int, mt5_path):
     # điều kiện PNL thấp hơn PNL hiện tại, chờ giá giảm rồi bật lên
     data = pnl_monitor(account_monitor)
-    if (item.price <= data.total_pnl):
+    if (item.price >= data.total_pnl):
         try: 
             open_order_mt5(mt5_path, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
             update_type_lot(item.id)
