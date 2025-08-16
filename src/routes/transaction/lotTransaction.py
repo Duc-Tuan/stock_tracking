@@ -18,8 +18,9 @@ def post_lot_transaction(
     acc_transaction: int= Query(None),
     current_user: dict =Depends(get_current_user)):
 
-    # if str(current_user.role) != "UserRole.admin":
-    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    
     try:
         data = {
             "acc_transaction": acc_transaction,
@@ -35,8 +36,9 @@ def post_lot_transaction(
 
 @router.post("/lot-transaction")
 def post_lot_transaction( data: SymbolTransactionRequest, current_user: dict =Depends(get_current_user)):
-    # if str(current_user.role) != "UserRole.admin":
-    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    
     try:
         message = place_market_lot(data, current_user.id)
         return {"status": "success", "message": message}

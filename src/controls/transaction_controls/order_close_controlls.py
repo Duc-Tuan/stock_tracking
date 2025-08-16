@@ -1,6 +1,6 @@
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 from src.models.model import SessionLocal
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime
 
 def get_order_close(data, id_user):
@@ -27,8 +27,6 @@ def get_order_close(data, id_user):
             end_dt = datetime.fromtimestamp(int(data['end_time']) / 1000)
             filters.append(DealTransaction.close_time <= end_dt)
             
-        total = db.query(func.count(DealTransaction.id)).filter(*filters).scalar()
-
         dataOrdersClose = (
             query.filter(*filters)
             .order_by(DealTransaction.close_time.desc())
@@ -37,8 +35,16 @@ def get_order_close(data, id_user):
             .all()
         )
 
+        total_all = db.query(func.count(DealTransaction.id)).scalar()
+
+        result = db.query(
+            func.count(DealTransaction.id).label("total_filtered"),
+            func.sum(case((DealTransaction.position_type.in_(["BUY", "SELL"]), 1), else_=0)).label("total_both_filtered"),
+        ).filter(*filters).first()
+
         return {
-            "total": total,
+            "totalOrder": total_all,
+            "total": result.total_filtered or 0,
             "page": data['page'],
             "limit": data['limit'],
             "data": dataOrdersClose

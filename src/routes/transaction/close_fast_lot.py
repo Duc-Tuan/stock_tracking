@@ -9,8 +9,8 @@ router = APIRouter()
 
 @router.post("/close-fast-lot")
 def post_lot_transaction( data: CloseFastLotRequest, current_user: dict =Depends(get_current_user)):
-    # if str(current_user.role) != "UserRole.admin":
-    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
     try:
         message = close_fast_lot_contronlls(data.data, current_user.id)
         return {"status": "success", "message": message}

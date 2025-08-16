@@ -1,6 +1,6 @@
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.model import SessionLocal
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime
 
 def get_all_send_symbols(data, id_user):
@@ -33,6 +33,14 @@ def get_all_send_symbols(data, id_user):
             end_dt = datetime.fromtimestamp(int(data['end_time']) / 1000)
             filters.append(SymbolTransaction.time <= end_dt)
             
+        result = db.query(
+            func.sum(case((SymbolTransaction.status == "filled", 1), else_=0)).label("total_filled"),
+            func.sum(case((SymbolTransaction.status == "cancelled", 1), else_=0)).label("total_cancelled"),
+            func.count(SymbolTransaction.id).filter(
+                SymbolTransaction.status.in_(["filled", "cancelled"])
+            ).label("total_both")
+        ).one()
+
         total = db.query(func.count(SymbolTransaction.id)).filter(*filters).scalar()
 
         dataOrdersClose = (
@@ -47,7 +55,10 @@ def get_all_send_symbols(data, id_user):
             "total": total,
             "page": data['page'],
             "limit": data['limit'],
-            "data": dataOrdersClose
+            "data": dataOrdersClose,
+            "totalFilled": result.total_filled or 0,
+            "totalCancelled": result.total_cancelled or 0,
+            "totalResult": result.total_both or 0
         }
     except Exception as e:
         db.rollback()
