@@ -159,16 +159,24 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
         status_sl_tp=data.status_sl_tp
     )
     db.add(lotNew)
-    db.commit()
 
-    results = []
     if data.status == 'Lenh_thi_truong':
+        results = []
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(run_order, order, data, username_id, lotNew.id) for order in data.by_symbol]
             for future in as_completed(futures):
                 results.append(future.result())
+
+            # ✅ chỉ commit khi tất cả run_order return success
+            if all(r["status"] == "success" for r in results):
+                db.commit()
+                db.close()
+            else:
+                db.rollback()
         return results
     else:
+        db.flush()
+
         for by_symbol in data.by_symbol:
             symbol = SymbolTransaction(
                 username_id=username_id,
@@ -186,7 +194,7 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
                 account_id = data.account_transaction_id,
                 symbol = by_symbol.symbol,
                 order_type = by_symbol.type,
-                volume = lotNew.id,
+                volume = data.volume,
                 price = by_symbol.current_price,
                 sl = 0,
                 tp = 0,
@@ -198,7 +206,6 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
 def get_symbols_lot(id_lot, id_user):
     db = SessionLocal()
     try:
-
         rows = db.query(
             SymbolTransaction.symbol,
             SymbolTransaction.price_transaction,

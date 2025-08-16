@@ -179,8 +179,10 @@ def close_order_mt5(id: int, mt5_path):
             futures = [executor.submit(run_order_close, dataLot, mt5_path) for dataLot in dataLots]
             for future in as_completed(futures):
                 results.append(future.result())
+        # ✅ chỉ commit khi tất cả run_order return success
+        if all(r["status"] == "success" for r in results):
+            update_type_lot_type(id)
         print("✅ vào lệnh trên MT5")
-
     finally:
         db.close()
 
@@ -274,8 +276,11 @@ def open_order_mt5(mt5_path, id_lot: int, priceCurrentSymbls):
             futures = [executor.submit(run_order, order, json.loads(priceCurrentSymbls)[replace_suffix_with_m(order.symbol)], mt5_path) for order in dataSymbolOpenSend]
             for future in as_completed(futures):
                 results.append(future.result())
-        print("✅ vào lệnh trên MT5")
 
+        # ✅ chỉ commit khi tất cả run_order return success
+        if all(r["status"] == "success" for r in results):
+            update_type_lot(id_lot)
+        print("✅ vào lệnh trên MT5")
     finally:
         db.close()
 
@@ -286,8 +291,7 @@ def nguoc_limit_xuoi_stop(item: LotInformation, account_monitor: int, mt5_path):
     if (item.price <= data.total_pnl):
         try: 
             open_order_mt5(mt5_path, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
-            update_type_lot(item.id)
-            print("Lệnh ngược limit: ", item.price, data.total_pnl, vars(item), item.price >= data.total_pnl)
+            print("✅ Lệnh ngược limit")
         except Exception as e:
             print(f"Lỗi ở lệnh ngược limit: {e}")
 
@@ -297,8 +301,7 @@ def xuoi__limit_nguoc_stop(item: LotInformation, account_monitor: int, mt5_path)
     if (item.price >= data.total_pnl):
         try: 
             open_order_mt5(mt5_path, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
-            update_type_lot(item.id)
-            print("Lệnh xuôi limit: ", vars(item))
+            print("✅ Lệnh xuôi limit")
         except Exception as e:
             print(f"Lỗi ở lệnh ngược limit: {e}")
 
@@ -313,7 +316,6 @@ def mac_dinh(item: LotInformation, account_monitor: int, mt5_path):
             if (pnl <= item.stop_loss or pnl >= item.take_profit):
                 try:
                     close_order_mt5(item.id, mt5_path)
-                    update_type_lot_type(item.id)
                     print("Đóng lệnh ở trạng thái lô xuôi: ")
                 except Exception as e:
                     print(f"Lỗi ở đóng lệnh ở trạng thái lô xuôi: {e}")
@@ -321,7 +323,6 @@ def mac_dinh(item: LotInformation, account_monitor: int, mt5_path):
             if (pnl >= item.stop_loss or pnl <= item.take_profit):
                 try:
                     close_order_mt5(item.id, mt5_path)
-                    update_type_lot_type(item.id)
                     print("Đóng lệnh ở trạng thái lô ngược: ")
                 except Exception as e:
                     print(f"Lỗi ở đóng lệnh ở trạng thái lô ngược: {e}")
