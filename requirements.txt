@@ -14,3 +14,4 @@ openpyxl
 schedule
 python-socketio
 httptools
+orjson
