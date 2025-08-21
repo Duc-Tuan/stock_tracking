@@ -33,8 +33,6 @@ def replace_suffix_with_m(sym: str) -> str:
     
 
 def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
-    db = SessionLocal()
-
     symbol_replace = replace_suffix_with_m(symbol)
 
     symbol_info = mt5.symbol_info(symbol_replace)
@@ -95,8 +93,6 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             profit = profit,
             status = 'filled'
         )
-        db.add(symbolSQL)
-
         order_transaction = OrdersTransaction(
             id_transaction= ticket_id,
             account_id = account_transaction_id,
@@ -106,14 +102,10 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             price = price,
             sl = 0,
             tp = 0,
-            status = 'filled'
+                status = 'filled'
         )
-        db.add(order_transaction)
-
-        db.commit()
-        db.close()
         print("✅ Lệnh đã gửi:", result)
-        return result
+        return {"result": result, "status": "success", "data": (symbolSQL, order_transaction)}
     
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect():
@@ -123,7 +115,6 @@ def mt5_connect():
 
 # Hàm dùng trong thread, tạo session riêng
 def run_order(order, data, username_id, lot_id):
-    db = SessionLocal()
     try:
         message = order_send_mt5(
             price=order.current_price,
@@ -134,12 +125,9 @@ def run_order(order, data, username_id, lot_id):
             lot_id=lot_id,
             account_transaction_id=data.account_transaction_id
         )
-        return {"symbol": order.symbol, "status": "success", "message": message}
+        return {"symbol": order.symbol, "status": "success", "message": message, "data": message["data"]}
     except Exception as e:
-        db.rollback()
         return {"symbol": order.symbol, "status": "error", "message": str(e)}
-    finally:
-        db.close()
 
 def place_market_lot(data: SymbolTransactionRequest, username_id):
     mt5_connect()  # đảm bảo MT5 đã connect 1 lần
@@ -159,6 +147,7 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
         status_sl_tp=data.status_sl_tp
     )
     db.add(lotNew)
+    db.flush()
 
     if data.status == 'Lenh_thi_truong':
         results = []
@@ -167,16 +156,20 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
             for future in as_completed(futures):
                 results.append(future.result())
 
-            # ✅ chỉ commit khi tất cả run_order return success
-            if all(r["status"] == "success" for r in results):
-                db.commit()
+            try:
+                # ✅ chỉ commit khi tất cả run_order return success
+                if all(r["status"] == "success" for r in results):
+                    for r in results:
+                        symbolSQL, order_transaction = r["data"]
+                        db.add(symbolSQL)
+                        db.add(order_transaction)
+                    db.commit()
+                else:
+                    db.rollback()
+            finally:
                 db.close()
-            else:
-                db.rollback()
         return results
     else:
-        db.flush()
-
         for by_symbol in data.by_symbol:
             symbol = SymbolTransaction(
                 username_id=username_id,
@@ -189,7 +182,6 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
                 digits=0
             )
             db.add(symbol)
-
             order_transaction = OrdersTransaction(
                 account_id = data.account_transaction_id,
                 symbol = by_symbol.symbol,

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from src.models.modelAccMt5 import AccountMt5
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.utils.options import RegisterRequestAccMt5
 import MetaTrader5 as mt5
 from src.controls.authControll import def_create_acc_mt5, get_user
@@ -40,6 +41,22 @@ def get_acc_mt5_controll(db, username: str):
             row_dict.pop("password", None)  # bỏ trường login nếu cần
             row_dict.pop("loginId", None)  # bỏ trường login nếu cần
             result.append(row_dict)
+
+        return result
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def get_acc_mt5_transaction(db, username: str):
+    try:
+        user = get_user(db, username)
+        if not user:
+            return False
+        existing = db.query(AccountsTransaction).filter(AccountsTransaction.loginId == user.id).all()
+
+        result = [dict(row._mapping) for row in existing]
 
         return result
     except Exception as e:

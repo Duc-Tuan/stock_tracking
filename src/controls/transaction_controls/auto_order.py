@@ -15,6 +15,8 @@ from src.models.modelTransaction.position_transaction_model import PositionTrans
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
     ORDER_FILLING_IOC, ORDER_TIME_GTC,
@@ -31,6 +33,26 @@ def transaction_account_order(mt5_path, account_name, interval, stop_event):
     try: 
         while not stop_event.is_set():
             db = SessionLocal()
+
+            mt5_connect(path = mt5_path)
+            account_info = mt5.account_info()
+
+            existing = db.query(AccountsTransaction).filter(AccountsTransaction.username == account_info.login).all()
+            if (len(existing) == 0):
+                new_data = AccountsTransaction(
+                    username=account_info.login,
+                    server=account_info.server,
+                    balance=account_info.balance,
+                    equity=account_info.equity,
+                    margin=account_info.margin,
+                    free_margin=account_info.margin_free,
+                    leverage=account_info.leverage,
+                    name=account_info.login,
+                    loginId=1
+                )
+                db.add(new_data)
+                db.commit()
+
             try:
                 dataLot = db.query(LotInformation).order_by(LotInformation.time.desc()).all()
 
