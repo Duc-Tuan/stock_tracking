@@ -54,10 +54,10 @@ def get_acc_mt5_transaction(db, username: str):
         user = get_user(db, username)
         if not user:
             return False
+
         existing = db.query(AccountsTransaction).filter(AccountsTransaction.loginId == user.id).all()
 
-        result = [dict(row._mapping) for row in existing]
-
+        result = [row.__dict__ for row in existing]
         return result
     except Exception as e:
         db.rollback()

@@ -1,4 +1,4 @@
-from src.models.modelTransaction.schemas import SymbolTransactionRequest
+from src.models.modelTransaction.schemas import SymbolTransactionRequest, PatchotRequest
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
 from sqlalchemy import func
 from datetime import datetime
+from src.services.terminals_transaction import terminals_transaction
 import re
 
 from MetaTrader5 import (
@@ -30,7 +31,6 @@ def replace_suffix_with_m(sym: str) -> str:
     else:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm") + "m"
-    
 
 def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
     symbol_replace = replace_suffix_with_m(symbol)
@@ -108,9 +108,13 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
         return {"result": result, "status": "success", "data": (symbolSQL, order_transaction)}
     
 # Khởi tạo MT5 1 lần khi app start
-def mt5_connect():
-    if not mt5.initialize(path="C:/Program Files/MetaTrader 5/terminal64.exe"):
-        raise Exception(f"MT5 chưa kết nối. Lỗi: {mt5.last_error()}")
+def mt5_connect(account_name: int):
+    acc = terminals_transaction[str(account_name)]
+    # Đóng kết nối cũ nếu đang mở
+    mt5.shutdown()
+    # Kết nối mới
+    if not mt5.initialize(path=acc["path"], login=acc["login"], password=acc["password"], server=acc["server"]):
+        raise Exception(f"Không connect được MT5 {account_name}. Lỗi: {mt5.last_error()}")
     return True
 
 # Hàm dùng trong thread, tạo session riêng
@@ -130,7 +134,7 @@ def run_order(order, data, username_id, lot_id):
         return {"symbol": order.symbol, "status": "error", "message": str(e)}
 
 def place_market_lot(data: SymbolTransactionRequest, username_id):
-    mt5_connect()  # đảm bảo MT5 đã connect 1 lần
+    mt5_connect(data.account_transaction_id)  # đảm bảo MT5 đã connect 1 lần
 
     db = SessionLocal()
 
@@ -268,5 +272,57 @@ def get_symbols_db(data, id_user):
         }
     except Exception as e:
         db.rollback()
+    finally:
+        db.close()
+
+def delete_lot_transaction(id: int):
+    db = SessionLocal()
+    try: 
+        lot = db.query(LotInformation).filter(
+            LotInformation.id == id, 
+            LotInformation.type == "RUNNING",
+            LotInformation.status.in_(["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop"])
+        ).first()
+
+        if lot:
+            db.delete(lot)
+            db.query(SymbolTransaction).filter(SymbolTransaction.lot_id == lot.id).delete()
+            db.commit()
+            return {"status": "success", "message": "Xóa thành công."}
+
+        return {"status": "error", "message": "Không tìm thấy thông tin lô cần xóa."}
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Lỗi trong đóng lệnh nhanh: {e}")
+    finally:
+        db.close()
+
+def patch_lot_transaction(data: PatchotRequest):
+    db = SessionLocal()
+    try: 
+        lot = db.query(LotInformation).filter(
+            LotInformation.id == data.id, 
+            LotInformation.type == "RUNNING",
+            LotInformation.status == "Lenh_thi_truong"
+        ).first()
+
+
+        if lot:
+            db.query(LotInformation).filter( 
+                LotInformation.id == data.id, 
+                LotInformation.type == "RUNNING",
+                LotInformation.status == "Lenh_thi_truong"
+            ).update({
+                "stop_loss": float(data.stop_loss),
+                "take_profit": float(data.take_profit)
+            })
+
+            db.commit()
+            return {"status": "success", "message": "Update thành công"}
+
+        return {"status": "error", "message": "Không tìm thấy thông tin lô cần update."}
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Lỗi trong đóng lệnh nhanh: {e}")
     finally:
         db.close()

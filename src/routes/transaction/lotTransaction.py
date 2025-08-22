@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from src.middlewares.authMiddleware import get_db
 from sqlalchemy.orm import Session
 from src.controls.authControll import get_current_user
-from src.models.modelTransaction.schemas import SymbolTransactionRequest, getLots
-from src.controls.transaction_controls.place_market_lot import place_market_lot, get_symbols_db
+from src.models.modelTransaction.schemas import SymbolTransactionRequest, DeleteLotRequest, PatchotRequest
+from src.controls.transaction_controls.place_market_lot import place_market_lot, get_symbols_db, delete_lot_transaction, patch_lot_transaction
 from typing import Literal
 
 router = APIRouter()
@@ -42,6 +42,26 @@ def post_lot_transaction( data: SymbolTransactionRequest, current_user: dict =De
     try:
         message = place_market_lot(data, current_user.id)
         return {"status": "success", "message": message}
+    except Exception as e:
+        raise HTTPException(status_code=403, detail=e)
+    
+@router.delete("/lot-transaction")
+def post_lot_transaction( data: DeleteLotRequest, current_user: dict =Depends(get_current_user)):
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    
+    try:
+        return delete_lot_transaction(data.id)
+    except Exception as e:
+        raise HTTPException(status_code=403, detail=e)
+
+@router.patch("/lot-transaction")
+def post_lot_transaction( data: PatchotRequest, current_user: dict =Depends(get_current_user)):
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    
+    try:
+        return patch_lot_transaction(data)
     except Exception as e:
         raise HTTPException(status_code=403, detail=e)
     

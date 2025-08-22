@@ -18,7 +18,7 @@ from src.routes.transaction.close_fast_lot import router as close_lot_router
 from src.routes.transaction.orderTransaction import router as order_close_router
 from src.routes.transaction.send_symbols_transaction import router as send_symbol_router
 from src.routes.transaction.position_transaction import router as position_transaction_router
-from src.routes.wsRouter import websocket_pnl_io, websocket_position_io
+from src.routes.wsRouter import websocket_pnl_io, websocket_position_io, websocket_acc_transaction_io
 
 # Load env
 load_dotenv()
@@ -87,6 +87,20 @@ async def broadcast_order_data(symbol_id, token):
     except asyncio.CancelledError:
         print(f"⛔ Task for symbol {symbol_id} cancelled")
 
+async def broadcast_acc_transaction_data(symbol_id, token):
+    try:
+        while True:
+            try:
+                data = await asyncio.to_thread(websocket_acc_transaction_io, symbol_id, token)
+                symbol_last_data[symbol_id] = data
+                for sid in list(symbol_clients[symbol_id]):
+                    await sio.emit('acc_transaction_message', jsonable_encoder(data), to=sid)
+            except Exception as e:
+                print(f"[ERROR] broadcast_symbol_data: {e}")
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        print(f"⛔ Task for symbol {symbol_id} cancelled")
+
 @sio.event
 async def connect(sid, environ):
     query = parse_qs(environ.get('QUERY_STRING', ''))
@@ -98,9 +112,9 @@ async def connect(sid, environ):
     if symbol_id not in symbol_tasks:
         print(f"🚀 Starting task for symbol {symbol_id}")
         pnl_task = asyncio.create_task(broadcast_symbol_data(symbol_id, token))
-
         order_task = asyncio.create_task(broadcast_order_data(symbol_id, token))
-        symbol_tasks[symbol_id] = [pnl_task, order_task]
+        acc_transaction = asyncio.create_task(broadcast_acc_transaction_data(symbol_id, token))
+        symbol_tasks[symbol_id] = [pnl_task, order_task, acc_transaction]
 
 @sio.event
 async def disconnect(sid):

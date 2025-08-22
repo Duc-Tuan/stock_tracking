@@ -4,16 +4,20 @@ from src.models.model import SessionLocal
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.services.terminals_transaction import terminals_transaction
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 
 # Khởi tạo MT5 1 lần khi app start
-def mt5_connect(path):
-    if not mt5.initialize(path=path):
-        raise Exception(f"MT5 chưa kết nối. Lỗi: {mt5.last_error()}")
+def mt5_connect(account_name: int):
+    acc = terminals_transaction[str(account_name)]
+    # Đóng kết nối cũ nếu đang mở
+    mt5.shutdown()
+    # Kết nối mới
+    if not mt5.initialize(path=acc["path"]):
+        raise Exception(f"Không connect được MT5 {account_name}. Lỗi: {mt5.last_error()}")
     return True
 
-def run_order(data: SymbolTransaction, mt5_path):
-    mt5_connect(mt5_path)
-
+def run_order(data: SymbolTransaction):
     db = SessionLocal()
     position = mt5.positions_get(ticket=data.id_transaction)
     try:
@@ -53,16 +57,47 @@ def run_order(data: SymbolTransaction, mt5_path):
     finally:
         db.close()
 
-def auto_position(mt5_path, account_name, interval, stop_event):
+def auto_position(account_name, interval, stop_event):
     try: 
         while not stop_event.is_set():
+            mt5_connect(account_name)
+
             db = SessionLocal()
             try:
                 dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
 
+                account_info = mt5.account_info()
+
+                existing = db.query(AccountsTransaction).filter(AccountsTransaction.username == int(account_info.login)).all()
+                new_data = AccountsTransaction(
+                    username=account_info.login,
+                    server=account_info.server,
+                    balance=account_info.balance,
+                    equity=account_info.equity,
+                    margin=account_info.margin,
+                    free_margin=account_info.margin_free,
+                    leverage=account_info.leverage,
+                    name=account_info.login,
+                    loginId=1
+                )
+                
+                if (len(existing) == 0):
+                    db.add(new_data)
+                else:
+                    db.query(AccountsTransaction).filter(AccountsTransaction.username == account_info.login).update({
+                        "balance": account_info.balance,
+                        "equity": account_info.equity,
+                        "margin": account_info.margin,
+                        "free_margin": account_info.margin_free,
+                        "leverage": account_info.leverage,
+                        "server": account_info.server,
+                    })
+
+                db.commit()
+    
                 results = []
                 with ThreadPoolExecutor() as executor:
-                    futures = [executor.submit(run_order, order, mt5_path) for order in dataOrder]
+                    futures = [executor.submit(run_order, order) for order in dataOrder]
                     for future in as_completed(futures):
                         results.append(future.result())
                 print("✅ theo dõi tick đã vào lệnh trên MT5")

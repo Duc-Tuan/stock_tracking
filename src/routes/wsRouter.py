@@ -4,6 +4,7 @@ from src.middlewares.authMiddleware import get_db
 from sqlalchemy.orm import Session
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.models.model import SessionLocal
 from datetime import datetime
 import asyncio
@@ -49,12 +50,30 @@ def websocket_pnl_io(id_symbol: int = "", token: str = ""):
         db.close()
     
 def websocket_position_io(id_symbol: int = "", token: str = ""):
-    if str(get_current_user(token).role) != "UserRole.admin":
+    user = get_current_user(token)
+    if str(user.role) != "UserRole.admin":
         raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập position")
     
     db = SessionLocal()
     try:
-        data = db.query(PositionTransaction).filter(PositionTransaction.username_id == get_current_user(token).id).order_by(PositionTransaction.time.desc()).all()
+        data = db.query(PositionTransaction).filter(
+            PositionTransaction.username_id == user.id
+        ).order_by(PositionTransaction.time.desc()).all()
+
+        return data
+    except Exception as e:
+        print("❌ Lỗi lưu DB:", e)
+    finally:
+        db.close()
+
+def websocket_acc_transaction_io(id_symbol: int = "", token: str = ""):
+    user = get_current_user(token)
+    if str(user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập acc")
+    
+    db = SessionLocal()
+    try:
+        data = db.query(AccountsTransaction).filter(AccountsTransaction.loginId == user.id).order_by(AccountsTransaction.id.desc()).all()
         return data
     except Exception as e:
         print("❌ Lỗi lưu DB:", e)

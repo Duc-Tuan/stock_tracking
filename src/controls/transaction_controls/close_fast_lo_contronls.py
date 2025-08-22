@@ -13,7 +13,7 @@ def run_lots(id_lot: int, id_user: int):
         
         results = []
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(run_order_close, dataLot, "C:/Program Files/MetaTrader 5/terminal64.exe") for dataLot in dataLots]
+            futures = [executor.submit(run_order_close, dataLot) for dataLot in dataLots]
             for future in as_completed(futures):
                 results.append(future.result())
                 

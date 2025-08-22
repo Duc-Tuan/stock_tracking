@@ -6,10 +6,7 @@ import signal
 from multiprocessing import Process, Queue, freeze_support,Event
 from src.controls.transaction_controls.auto_order import transaction_account_order
 from src.controls.transaction_controls.auto_position_transaction import auto_position
-
-terminals = {
-    "Acc1": "C:/Program Files/MetaTrader 5/terminal64.exe",
-}
+from src.services.terminals_transaction import terminals_transaction
 
 def start_mt5_monitor():
     try:
@@ -25,12 +22,12 @@ def start_mt5_monitor():
 
         # Chạy tiến trình theo dõi PNL để vào lệnh và đóng lệnh
         processes = []
-        for name, path in terminals.items():
-            p1 = Process(target=transaction_account_order, args=(path, name, 1, stop_event))
+        for name, path in terminals_transaction.items():
+            p1 = Process(target=transaction_account_order, args=(name, 1, stop_event))
             p1.start()
             processes.append(p1)
 
-            p2 = Process(target=auto_position, args=(path, name, 1, stop_event))
+            p2 = Process(target=auto_position, args=(name, 1, stop_event))
             p2.start()
             processes.append(p2)
 

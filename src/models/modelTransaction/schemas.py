@@ -62,7 +62,7 @@ class symbolItem(BaseModel):
 
 class SymbolTransactionRequest(BaseModel):
     account_monitor_id: float
-    account_transaction_id: float
+    account_transaction_id: int
     price: float
     volume: float
     stop_loss: float
@@ -85,3 +85,12 @@ class getLots(BaseModel):
     acc_transaction: int
     page: int
     limit: int
+
+
+class DeleteLotRequest(BaseModel):
+    id: int
+
+class PatchotRequest(BaseModel):
+    id: int
+    stop_loss: float
+    take_profit: float

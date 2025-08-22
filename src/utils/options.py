@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 from sqlalchemy.inspection import inspect
+import re
 
 load_dotenv()
 SQLALCHEMY_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
@@ -30,3 +31,12 @@ def object_as_dict(obj):
         c.key: getattr(obj, c.key)
         for c in inspect(obj).mapper.column_attrs
     }
+
+def replace_suffix_with_m(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0) + "c"
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm") + "c"
