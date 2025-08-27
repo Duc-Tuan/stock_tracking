@@ -6,7 +6,7 @@ from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.models.model import SessionLocal
-from datetime import datetime
+from sqlalchemy import func
 import asyncio
 
 router = APIRouter()
@@ -43,6 +43,7 @@ def websocket_pnl_io(id_symbol: int = "", token: str = ""):
             "time": data.time,
             "total_pnl": data.total_pnl,
             "by_symbol": data.by_symbol,
+            "id_symbol": id_symbol
         }
     except Exception as e:
         print("❌ Lỗi lưu DB:", e)
@@ -60,7 +61,12 @@ def websocket_position_io(id_symbol: int = "", token: str = ""):
             PositionTransaction.username_id == user.id
         ).order_by(PositionTransaction.time.desc()).all()
 
-        return data
+        query = db.query(AccountsTransaction).filter(AccountsTransaction.loginId == user.id).order_by(AccountsTransaction.id.desc()).all()
+
+        return {
+            "position": data,
+            "acc": query
+        }
     except Exception as e:
         print("❌ Lỗi lưu DB:", e)
     finally:
@@ -73,8 +79,24 @@ def websocket_acc_transaction_io(id_symbol: int = "", token: str = ""):
     
     db = SessionLocal()
     try:
-        data = db.query(AccountsTransaction).filter(AccountsTransaction.loginId == user.id).order_by(AccountsTransaction.id.desc()).all()
-        return data
+        query = (
+            db.query(
+                AccountsTransaction,
+                func.count(PositionTransaction.id).label("position")
+            )
+            .outerjoin(PositionTransaction, PositionTransaction.account_id == AccountsTransaction.username)
+            .filter(AccountsTransaction.loginId == user.id)
+            .group_by(AccountsTransaction.id)
+            .order_by(AccountsTransaction.id.desc())
+        )
+
+        result = []
+        for acc, position in query.all():
+            acc_dict = acc.__dict__.copy()
+            acc_dict["position"] = position
+            result.append(acc_dict)
+
+        return result
     except Exception as e:
         print("❌ Lỗi lưu DB:", e)
     finally:

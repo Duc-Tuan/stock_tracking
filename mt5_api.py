@@ -82,7 +82,7 @@ async def broadcast_order_data(symbol_id, token):
                 for sid in list(symbol_clients[symbol_id]):
                     await sio.emit('position_message', jsonable_encoder(data), to=sid)
             except Exception as e:
-                print(f"[ERROR] broadcast_symbol_data: {e}")
+                print(f"[ERROR] broadcast_order_data: {e}")
             await asyncio.sleep(1)
     except asyncio.CancelledError:
         print(f"⛔ Task for symbol {symbol_id} cancelled")
@@ -96,7 +96,7 @@ async def broadcast_acc_transaction_data(symbol_id, token):
                 for sid in list(symbol_clients[symbol_id]):
                     await sio.emit('acc_transaction_message', jsonable_encoder(data), to=sid)
             except Exception as e:
-                print(f"[ERROR] broadcast_symbol_data: {e}")
+                print(f"[ERROR] broadcast_acc_transaction_data: {e}")
             await asyncio.sleep(1)
     except asyncio.CancelledError:
         print(f"⛔ Task for symbol {symbol_id} cancelled")
