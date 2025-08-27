@@ -106,16 +106,22 @@ async def connect(sid, environ):
     query = parse_qs(environ.get('QUERY_STRING', ''))
     symbol_id = query.get('symbol_id', [None])[0]
     token = query.get('token', [None])[0]
-    
+
+    channels = query.get('channels', ["chat_message"])[0].split(",")
+
     symbol_clients[symbol_id].add(sid)
     
     if symbol_id not in symbol_tasks:
         print(f"🚀 Starting task for symbol {symbol_id}")
-        pnl_task = asyncio.create_task(broadcast_symbol_data(symbol_id, token))
-        order_task = asyncio.create_task(broadcast_order_data(symbol_id, token))
-        acc_transaction = asyncio.create_task(broadcast_acc_transaction_data(symbol_id, token))
-        symbol_tasks[symbol_id] = [pnl_task, order_task, acc_transaction]
-
+        tasks = []
+        if "chat_message" in channels:
+            tasks.append(asyncio.create_task(broadcast_symbol_data(symbol_id, token)))
+        if "position_message" in channels:
+            tasks.append(asyncio.create_task(broadcast_order_data(symbol_id, token)))
+        if "acc_transaction_message" in channels:
+            tasks.append(asyncio.create_task(broadcast_acc_transaction_data(symbol_id, token)))
+        symbol_tasks[symbol_id] = tasks
+        
 @sio.event
 async def disconnect(sid):
     print(f"❌ Client disconnected: {sid}")

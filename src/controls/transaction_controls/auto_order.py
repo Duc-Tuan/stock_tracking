@@ -328,14 +328,14 @@ def mac_dinh(item: LotInformation, account_monitor: int):
     data = pnl_monitor(account_monitor)
     pnl = data.total_pnl
     if (item.type == "RUNNING"): 
-        if (item.status_sl_tp == "Xuoi"):
+        if item.status_sl_tp in ["Xuoi_Limit", "Xuoi_Stop"]:
             if (pnl <= item.stop_loss or pnl >= item.take_profit):
                 try:
                     close_order_mt5(id=item.id)
                     print("Đóng lệnh ở trạng thái lô xuôi: ")
                 except Exception as e:
                     print(f"Lỗi ở đóng lệnh ở trạng thái lô xuôi: {e}")
-        if (item.status_sl_tp == "Nguoc"):
+        if item.status_sl_tp in ["Nguoc_Limit", "Nguoc_Stop"]:
             if (pnl >= item.stop_loss or pnl <= item.take_profit):
                 try:
                     close_order_mt5(id=item.id)

@@ -16,7 +16,7 @@ class LotInformation(Base):
     time = Column(DateTime, default=datetime.utcnow)
     status = Column(Enum("Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"), default='Lenh_thi_truong') 
     type = Column(Enum("CLOSE", "RUNNING"), default="RUNNING")
-    status_sl_tp = Column(Enum("Xuoi", "Nguoc"), default='Xuoi')
+    status_sl_tp = Column(Enum("Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop"), default='Xuoi_Limit')
 
     account = relationship("AccountsTransaction", back_populates="lotaccount")
     symbol_rel = relationship("SymbolTransaction", back_populates="lotaccount")
