@@ -118,7 +118,7 @@ async def connect(sid, environ):
         if "acc_transaction_message" in channels:
             tasks.append(asyncio.create_task(broadcast_acc_transaction_data(symbol_id, token)))
         symbol_tasks[symbol_id] = tasks
-        
+
 @sio.event
 async def disconnect(sid):
     print(f"❌ Client disconnected: {sid}")

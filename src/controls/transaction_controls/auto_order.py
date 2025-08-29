@@ -1,6 +1,7 @@
 import re
 import time
 import json
+import asyncio
 import MetaTrader5 as mt5
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
@@ -16,7 +17,7 @@ from src.models.modelTransaction.orders_transaction_model import OrdersTransacti
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 
 from src.services.terminals_transaction import terminals_transaction
-from src.services.socket_manager import sio
+from src.services.socket_manager import emit_sync
 
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
@@ -73,9 +74,23 @@ def pnl_monitor(id):
     db.close()
     return  data
 
+def model_to_dict(obj):
+    result = {}
+    for c in obj.__table__.columns:
+        value = getattr(obj, c.name)
+        if isinstance(value, datetime):
+            result[c.name] = value.isoformat()   # hoặc str(value)
+        else:
+            result[c.name] = value
+    return result
+
 def update_type_lot(id):
     db = SessionLocal()
     data = db.query(LotInformation).filter(LotInformation.id == id).update({"status": "Lenh_thi_truong"})
+
+    lot = db.query(LotInformation).filter(LotInformation.id == id).first()
+    emit_sync("order_filled", {"status": "open_order", "data": model_to_dict(lot)})
+
     db.commit()
     db.close()
     return data
@@ -296,7 +311,6 @@ def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
 
         # ✅ chỉ commit khi tất cả run_order return success
         if all(r["status"] == "success" for r in results):
-            sio.emit("order_filled", dataSymbolOpenSend)
             update_type_lot(id_lot)
         print("✅ vào lệnh trên MT5")
     finally:
