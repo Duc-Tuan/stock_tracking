@@ -16,6 +16,7 @@ from src.models.modelTransaction.orders_transaction_model import OrdersTransacti
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 
 from src.services.terminals_transaction import terminals_transaction
+from src.services.socket_manager import sio
 
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
@@ -295,6 +296,7 @@ def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
 
         # ✅ chỉ commit khi tất cả run_order return success
         if all(r["status"] == "success" for r in results):
+            sio.emit("order_filled", dataSymbolOpenSend)
             update_type_lot(id_lot)
         print("✅ vào lệnh trên MT5")
     finally:

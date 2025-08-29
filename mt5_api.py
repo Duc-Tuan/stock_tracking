@@ -19,6 +19,7 @@ from src.routes.transaction.orderTransaction import router as order_close_router
 from src.routes.transaction.send_symbols_transaction import router as send_symbol_router
 from src.routes.transaction.position_transaction import router as position_transaction_router
 from src.routes.wsRouter import websocket_pnl_io, websocket_position_io, websocket_acc_transaction_io
+from src.services.socket_manager import sio
 
 # Load env
 load_dotenv()
@@ -51,9 +52,6 @@ app.include_router(close_lot_router)
 app.include_router(order_close_router)
 app.include_router(send_symbol_router)
 app.include_router(position_transaction_router)
-
-# Tạo server socket.io
-sio = socketio.AsyncServer(cors_allowed_origins='*', async_mode='asgi', compression=False)
 
 symbol_clients = defaultdict(set)
 symbol_last_data = {}
@@ -108,7 +106,6 @@ async def connect(sid, environ):
     token = query.get('token', [None])[0]
 
     channels = query.get('channels', ["chat_message"])[0].split(",")
-
     symbol_clients[symbol_id].add(sid)
     
     if symbol_id not in symbol_tasks:
