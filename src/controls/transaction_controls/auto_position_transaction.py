@@ -6,6 +6,8 @@ from src.models.modelTransaction.position_transaction_model import PositionTrans
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.services.terminals_transaction import terminals_transaction
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+from src.services.socket_manager import emit_sync
+import random
 
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect(account_name: int):
@@ -20,6 +22,7 @@ def mt5_connect(account_name: int):
 def run_order(data: SymbolTransaction):
     db = SessionLocal()
     position = mt5.positions_get(ticket=data.id_transaction)
+    result = None
     try:
         if position:
             pos = position[0]
@@ -31,6 +34,22 @@ def run_order(data: SymbolTransaction):
                     "profit": pos.profit,
                     "open_price": pos.price_open
                 })
+                result = dict(
+                    id_transaction=isPosition.id_transaction,
+                    username_id=isPosition.username_id,
+                    account_id=isPosition.account_id,
+                    symbol=isPosition.symbol,
+                    position_type=isPosition.position_type,
+                    volume=isPosition.volume,
+                    open_price=pos.price_open,
+                    current_price=pos.price_current,
+                    sl=isPosition.sl,
+                    tp=isPosition.tp,
+                    magic_number=isPosition.magic_number,
+                    comment=isPosition.comment,
+                    swap=pos.swap,
+                    profit=pos.profit
+                )
             else:
                 dataNew = PositionTransaction(
                     id_transaction = pos.ticket,
@@ -43,19 +62,35 @@ def run_order(data: SymbolTransaction):
                     current_price = pos.price_current,
                     sl = pos.sl,
                     tp = pos.tp,
-                    # open_time = pos.time,
                     magic_number = 123456,
                     comment = pos.comment,
                     swap = pos.swap,
                     profit = pos.profit
                 )
                 db.add(dataNew)
+                result = dict(
+                    id_transaction=dataNew.id_transaction,
+                    username_id=dataNew.username_id,
+                    account_id=dataNew.account_id,
+                    symbol=dataNew.symbol,
+                    position_type=dataNew.position_type,
+                    volume=dataNew.volume,
+                    open_price=dataNew.open_price,
+                    current_price=dataNew.current_price,
+                    sl=dataNew.sl,
+                    tp=dataNew.tp,
+                    magic_number=dataNew.magic_number,
+                    comment=dataNew.comment,
+                    swap=dataNew.swap,
+                    profit=dataNew.profit
+                )
             db.commit()
     except Exception as e:
         db.rollback()
         print(f"❌ Lỗi trong auto_position: {e}")
     finally:
         db.close()
+        return result
 
 def auto_position(account_name, interval, stop_event):
     try: 
@@ -99,7 +134,25 @@ def auto_position(account_name, interval, stop_event):
                 with ThreadPoolExecutor() as executor:
                     futures = [executor.submit(run_order, order) for order in dataOrder]
                     for future in as_completed(futures):
-                        results.append(future.result())
+                        if future.result():  # chỉ thêm nếu có dữ liệu
+                            results.append(future.result())
+
+                # Lấy dữ liệu trước khi đóng session
+                acc_data = [dict(
+                    id=a.id,
+                    username=a.username,
+                    server=a.server,
+                    balance=a.balance,
+                    equity=a.equity,
+                    margin=a.margin,
+                    free_margin=a.free_margin,
+                    leverage=a.leverage,
+                    name=a.name,
+                    loginId=a.loginId,
+                ) for a in db.query(AccountsTransaction).all()]
+
+                emit_sync("position_message", {"acc": acc_data, "positions": results})
+
                 print("✅ theo dõi tick đã vào lệnh trên MT5")
             except Exception as e:
                 db.rollback()

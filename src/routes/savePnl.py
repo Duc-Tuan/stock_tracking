@@ -15,7 +15,17 @@ from src.utils.stop import stopDef
 from filelock import FileLock
 from openpyxl.utils.exceptions import InvalidFileException
 import zipfile
-from collections import defaultdict
+from src.services.socket_manager import emit_chat_message_sync
+from multiprocessing.managers import BaseManager
+
+# Kết nối tới Queue server
+class QueueManager(BaseManager): pass
+QueueManager.register("get_queue")
+
+def connect_queue():
+    manager = QueueManager(address=("localhost", 5000), authkey=b"123")
+    manager.connect()
+    return manager.get_queue()
 
 def swap_difference(db, account_info):
     def get_log_for_day(day_date):
@@ -50,6 +60,7 @@ def swap_difference(db, account_info):
     return 0
 
 def monitor_account(mt5_path, account_name, interval, queue, stop_event):
+    queueOpenOrder = connect_queue()
     if not mt5.initialize(path=mt5_path):
         print(f"[{account_name}] ❌ Cannot initialize MT5 at {mt5_path}")
         time.sleep(interval)
@@ -64,6 +75,8 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
             db = SessionLocal()
             
             try:
+                all_accounts_data = []
+
                 account_info = mt5.account_info()
                 positions = mt5.positions_get()
 
@@ -120,13 +133,25 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
 
                     db.add(log)
                     db.commit()
+
+
+                    all_accounts_data.append({
+                        "login": account_info.login,
+                        "total_pnl":total_pnl,
+                        "by_symbol":by_symbol_json
+                    })
+
                     queue.put(data)  # 👉 gửi về process ghi log
                     print(f"✅ Đã ghi PnL {account_info.login}: giá chưa tính swap {account_info.profit}, giá đã tính swap {total_pnl} với {num_positions} lệnh, swap chênh lệch: {total_swap_difference}", f'info: {symbol_pnls}')
+                
+                emit_chat_message_sync("chat_message", all_accounts_data)
+                queueOpenOrder.put(all_accounts_data)
             except Exception as e:
                 db.rollback()
                 print(f"[{account_name}] ❌ Lỗi trong monitor_account: {e}")
             finally:
                 time.sleep(interval)
+                db.close()
     except KeyboardInterrupt:
         print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")
     finally:

@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from datetime import datetime
 
+from requests import session
+
 from src.models.model import SessionLocal
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 
@@ -25,6 +27,17 @@ from MetaTrader5 import (
     TRADE_ACTION_DEAL, TRADE_ACTION_PENDING
 )
 
+from multiprocessing.managers import BaseManager
+
+# Kết nối tới Queue server
+class QueueManager(BaseManager): pass
+QueueManager.register("get_queue")
+
+def connect_queue():
+    manager = QueueManager(address=("localhost", 5000), authkey=b"123")
+    manager.connect()
+    return manager.get_queue()
+
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect(account_name: int):
     acc = terminals_transaction[str(account_name)]
@@ -39,23 +52,16 @@ def transaction_account_order(name, interval, stop_event):
     try: 
         while not stop_event.is_set():
             db = SessionLocal()
-
             try:
-                dataLot = db.query(LotInformation).filter(LotInformation.account_transaction_id == int(name)).order_by(LotInformation.time.desc()).all()
-
+                dataLot = db.query(LotInformation).filter(LotInformation.account_transaction_id == int(name), LotInformation.type == "RUNNING").order_by(LotInformation.time.desc()).all()
                 for item in dataLot:
-                    status = item.status
-                    account_monitor = item.account_monitor_id
-
                     switch_case = {
-                        "Nguoc_Limit": partial(nguoc_limit_xuoi_stop, item, account_monitor),
-                        "Xuoi_Stop": partial(nguoc_limit_xuoi_stop, item, account_monitor),
-
-                        "Xuoi_Limit": partial(xuoi__limit_nguoc_stop, item, account_monitor),
-                        "Nguoc_Stop": partial(xuoi__limit_nguoc_stop, item, account_monitor),
+                        "Nguoc_Limit": partial(nguoc_limit_xuoi_stop, item),
+                        "Xuoi_Stop": partial(nguoc_limit_xuoi_stop, item),
+                        "Xuoi_Limit": partial(xuoi__limit_nguoc_stop, item),
+                        "Nguoc_Stop": partial(xuoi__limit_nguoc_stop, item),
                     }
-
-                    switch_case.get(status, partial(mac_dinh, item, account_monitor))()
+                    switch_case.get(item.status, partial(mac_dinh, item))()
                 # print(f"✅ Theo dõi lot", status)
             except Exception as e:
                 db.rollback()
@@ -70,6 +76,8 @@ def transaction_account_order(name, interval, stop_event):
 
 def pnl_monitor(id):
     db = SessionLocal()
+    db.expire_all()   # xoá cache
+    db.rollback()     # đảm bảo session sync DB
     data = db.query(MultiAccountPnL).filter(MultiAccountPnL.login == id).order_by(MultiAccountPnL.time.desc()).first()
     db.close()
     return  data
@@ -316,47 +324,94 @@ def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
     finally:
         db.close()
 
-# Hàm logic gửi yêu cầu mở lệnh theo giá so với PNL lên mt5
-def nguoc_limit_xuoi_stop(item: LotInformation, account_monitor: int):
-    # Với điều kiện PNL cao hơn PNL hiện tại, chờ giá giảm rồi bật lên
-    data = pnl_monitor(account_monitor)
-    if (item.price <= data.total_pnl):
-        try: 
-            open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
-            print("✅ Lệnh ngược limit")
-        except Exception as e:
-            print(f"Lỗi ở lệnh ngược limit: {e}")
+def pnl_mon(account_monitor):
+    queueOpenOrder = connect_queue()    
+    data_from_queue = queueOpenOrder.get(timeout=1)
 
-def xuoi__limit_nguoc_stop(item: LotInformation, account_monitor: int):
+    # Giả sử muốn lọc theo login = 263006287
+    target_login = int(account_monitor)
+    return [item for item in data_from_queue if item.get('login') == target_login]
+
+# Hàm logic gửi yêu cầu mở lệnh theo giá so với PNL lên mt5
+def nguoc_limit_xuoi_stop(item: LotInformation):
+    # Với điều kiện PNL cao hơn PNL hiện tại, chờ giá giảm rồi bật lên
+    # data = pnl_monitor(account_monitor)
+    # if (item.price <= data.total_pnl):
+    #     try: 
+    #         open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
+    #         print("✅ Lệnh ngược limit")
+    #     except Exception as e:
+    #         print(f"Lỗi ở lệnh ngược limit: {e}")
+    data = pnl_mon(item.account_monitor_id)
+    if data:
+        # data[0].get('total_pnl', 0)
+        if (item.price <= data[0].get('total_pnl', 0)):
+            try: 
+                open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data[0].get('by_symbol', ''))
+                print("✅ Lệnh xuoi__limit_nguoc_stop")
+            except Exception as e:
+                print(f"Lỗi ở lệnh ngược xuoi__limit_nguoc_stop: {e}")
+
+def xuoi__limit_nguoc_stop(item: LotInformation):
     # điều kiện PNL thấp hơn PNL hiện tại, chờ giá giảm rồi bật lên
-    data = pnl_monitor(account_monitor)
-    if (item.price >= data.total_pnl):
-        try: 
-            open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
-            print("✅ Lệnh xuôi limit")
-        except Exception as e:
-            print(f"Lỗi ở lệnh xuôi limit: {e}")
+    # data = pnl_monitor(account_monitor)
+    # if (item.price >= data.total_pnl):
+    #     try: 
+    #         open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data.by_symbol)
+    #         print("✅ Lệnh xuôi limit")
+    #     except Exception as e:
+    #         print(f"Lỗi ở lệnh xuôi limit: {e}")
+    data = pnl_mon(item.account_monitor_id)
+    if data:
+        # data[0].get('total_pnl', 0)
+        if (item.price >= data[0].get('total_pnl', 0)):
+            try: 
+                open_order_mt5(acc_transaction=item.account_transaction_id, id_lot= item.id, priceCurrentSymbls= data[0].get('by_symbol', ''))
+                print("✅ Lệnh xuoi__limit_nguoc_stop")
+            except Exception as e:
+                print(f"Lỗi ở lệnh ngược xuoi__limit_nguoc_stop: {e}")
 
 # Hàm logic gửi yêu cầu đóng lệnh theo SL, TP so với PNL lên mt5
-def mac_dinh(item: LotInformation, account_monitor: int):
+def mac_dinh(item: LotInformation):
 # ngược: TP nằm dưới, SL nằm trên so với PNL
 # xuôi: TP nằm trên, SL nằm dưới so với PNL
-    data = pnl_monitor(account_monitor)
-    pnl = data.total_pnl
-    if (item.type == "RUNNING"): 
-        if item.status_sl_tp in ["Xuoi_Limit", "Xuoi_Stop"]:
-            if (pnl <= item.stop_loss or pnl >= item.take_profit):
-                try:
-                    close_order_mt5(id=item.id)
-                    print("Đóng lệnh ở trạng thái lô xuôi: ")
-                except Exception as e:
-                    print(f"Lỗi ở đóng lệnh ở trạng thái lô xuôi: {e}")
-        if item.status_sl_tp in ["Nguoc_Limit", "Nguoc_Stop"]:
-            if (pnl >= item.stop_loss or pnl <= item.take_profit):
-                try:
-                    close_order_mt5(id=item.id)
-                    print("Đóng lệnh ở trạng thái lô ngược: ")
-                except Exception as e:
-                    print(f"Lỗi ở đóng lệnh ở trạng thái lô ngược: {e}")
-    else:
-        print("Lệnh trên thị trường đã được đóng. Không thể thực hiện chức năng đóng tiếp!")
+    # data = pnl_monitor(account_monitor)
+    # pnl = data.total_pnl
+    # if (item.type == "RUNNING"): 
+    #     if item.status_sl_tp in ["Xuoi_Limit", "Xuoi_Stop"]:
+    #         if (pnl <= item.stop_loss or pnl >= item.take_profit):
+    #             try:
+    #                 close_order_mt5(id=item.id)
+    #                 print("Đóng lệnh ở trạng thái lô xuôi: ")
+    #             except Exception as e:
+    #                 print(f"Lỗi ở đóng lệnh ở trạng thái lô xuôi: {e}")
+    #     if item.status_sl_tp in ["Nguoc_Limit", "Nguoc_Stop"]:
+    #         if (pnl >= item.stop_loss or pnl <= item.take_profit):
+    #             try:
+    #                 close_order_mt5(id=item.id)
+    #                 print("Đóng lệnh ở trạng thái lô ngược: ")
+    #             except Exception as e:
+    #                 print(f"Lỗi ở đóng lệnh ở trạng thái lô ngược: {e}")
+    # else:
+    #     print("Lệnh trên thị trường đã được đóng. Không thể thực hiện chức năng đóng tiếp!")
+
+    data = pnl_mon(item.account_monitor_id)
+    if data:
+        pnl = data[0].get('total_pnl', 0)
+        if (item.type == "RUNNING"): 
+            if item.status_sl_tp in ["Xuoi_Limit", "Xuoi_Stop"]:
+                if (pnl <= item.stop_loss or pnl >= item.take_profit):
+                    try:
+                        close_order_mt5(id=item.id)
+                        print("Đóng lệnh ở trạng thái lô xuôi: ")
+                    except Exception as e:
+                        print(f"Lỗi ở đóng lệnh ở trạng thái lô xuôi: {e}")
+            if item.status_sl_tp in ["Nguoc_Limit", "Nguoc_Stop"]:
+                if (pnl >= item.stop_loss or pnl <= item.take_profit):
+                    try:
+                        close_order_mt5(id=item.id)
+                        print("Đóng lệnh ở trạng thái lô ngược: ")
+                    except Exception as e:
+                        print(f"Lỗi ở đóng lệnh ở trạng thái lô ngược: {e}")
+        else:
+            print("Lệnh trên thị trường đã được đóng. Không thể thực hiện chức năng đóng tiếp!")

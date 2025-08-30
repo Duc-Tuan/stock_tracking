@@ -1,6 +1,5 @@
 import asyncio
-import socketio
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from urllib.parse import parse_qs
@@ -18,9 +17,8 @@ from src.routes.transaction.close_fast_lot import router as close_lot_router
 from src.routes.transaction.orderTransaction import router as order_close_router
 from src.routes.transaction.send_symbols_transaction import router as send_symbol_router
 from src.routes.transaction.position_transaction import router as position_transaction_router
-from src.routes.wsRouter import websocket_pnl_io, websocket_position_io, websocket_acc_transaction_io
 from src.services.socket_manager import sio
-
+from src.controls.authControll import get_current_user
 # Load env
 load_dotenv()
 
@@ -54,50 +52,6 @@ app.include_router(send_symbol_router)
 app.include_router(position_transaction_router)
 
 symbol_clients = defaultdict(set)
-symbol_last_data = {}
-symbol_tasks = {}
-
-async def broadcast_symbol_data(symbol_id, token):
-    try:
-        while True:
-            try:
-                data = await asyncio.to_thread(websocket_pnl_io, symbol_id, token)
-                symbol_last_data[symbol_id] = data
-                for sid in list(symbol_clients[symbol_id]):
-                    await sio.emit('chat_message', jsonable_encoder(data), to=sid)
-            except Exception as e:
-                print(f"[ERROR] broadcast_symbol_data: {e}")
-            await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        print(f"⛔ Task for symbol {symbol_id} cancelled")
-
-async def broadcast_order_data(symbol_id, token):
-    try:
-        while True:
-            try:
-                data = await asyncio.to_thread(websocket_position_io, symbol_id, token)
-                symbol_last_data[symbol_id] = data
-                for sid in list(symbol_clients[symbol_id]):
-                    await sio.emit('position_message', jsonable_encoder(data), to=sid)
-            except Exception as e:
-                print(f"[ERROR] broadcast_order_data: {e}")
-            await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        print(f"⛔ Task for symbol {symbol_id} cancelled")
-
-async def broadcast_acc_transaction_data(symbol_id, token):
-    try:
-        while True:
-            try:
-                data = await asyncio.to_thread(websocket_acc_transaction_io, symbol_id, token)
-                symbol_last_data[symbol_id] = data
-                for sid in list(symbol_clients[symbol_id]):
-                    await sio.emit('acc_transaction_message', jsonable_encoder(data), to=sid)
-            except Exception as e:
-                print(f"[ERROR] broadcast_acc_transaction_data: {e}")
-            await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        print(f"⛔ Task for symbol {symbol_id} cancelled")
 
 @sio.event
 async def connect(sid, environ):
@@ -105,19 +59,16 @@ async def connect(sid, environ):
     symbol_id = query.get('symbol_id', [None])[0]
     token = query.get('token', [None])[0]
 
-    channels = query.get('channels', ["chat_message"])[0].split(",")
     symbol_clients[symbol_id].add(sid)
+
+    user = get_current_user(token)
+    if str(user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập socket")
     
-    if symbol_id not in symbol_tasks:
-        print(f"🚀 Starting task for symbol {symbol_id}")
-        tasks = []
-        if "chat_message" in channels:
-            tasks.append(asyncio.create_task(broadcast_symbol_data(symbol_id, token)))
-        if "position_message" in channels:
-            tasks.append(asyncio.create_task(broadcast_order_data(symbol_id, token)))
-        if "acc_transaction_message" in channels:
-            tasks.append(asyncio.create_task(broadcast_acc_transaction_data(symbol_id, token)))
-        symbol_tasks[symbol_id] = tasks
+    if symbol_id:
+        # Lưu vào room để sau này emit riêng
+        # await sio.enter_room(sid, f"position_message_{user.id}")
+        await sio.enter_room(sid, f"chat_message_{symbol_id}")
 
 @sio.event
 async def disconnect(sid):
@@ -127,7 +78,3 @@ async def disconnect(sid):
             clients.remove(sid)
             if not clients:
                 print(f"🛑 Stopping tasks for symbol {symbol_id}")
-                tasks = symbol_tasks.pop(symbol_id, [])
-                for task in tasks:
-                    if task:
-                        task.cancel()
