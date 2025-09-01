@@ -2,12 +2,15 @@ import time
 import MetaTrader5 as mt5
 from src.models.model import SessionLocal
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.services.terminals_transaction import terminals_transaction
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.services.socket_manager import emit_sync
-import random
+from sqlalchemy import func
+import json
 
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect(account_name: int):
@@ -96,7 +99,6 @@ def auto_position(account_name, interval, stop_event):
     try: 
         while not stop_event.is_set():
             mt5_connect(account_name)
-
             db = SessionLocal()
             try:
                 dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
@@ -151,8 +153,70 @@ def auto_position(account_name, interval, stop_event):
                     loginId=a.loginId,
                 ) for a in db.query(AccountsTransaction).all()]
 
-                emit_sync("position_message", {"acc": acc_data, "positions": results})
+                break_even = []
+                for item in acc_data:
 
+                    subq_total_profit = (
+                        db.query(
+                            SymbolTransaction.lot_id,
+                            LotInformation.account_monitor_id.label("account_monitor"),
+                            LotInformation.account_transaction_id.label("account_transaction"),
+                            func.sum(PositionTransaction.profit).label("total_profit"),
+                        )
+                        .join(SymbolTransaction, SymbolTransaction.lot_id == LotInformation.id)
+                        .join(PositionTransaction, PositionTransaction.id_transaction == SymbolTransaction.id_transaction)  # thêm join
+                        .filter(LotInformation.account_transaction_id == item["username"], LotInformation.status == "Lenh_thi_truong", LotInformation.type == "RUNNING")
+                        .group_by(LotInformation.account_monitor_id, LotInformation.account_transaction_id, SymbolTransaction.account_transaction_id)
+                        .subquery()
+                    )
+
+                    result_total_profit = (
+                        db.query(
+                            subq_total_profit.c.account_monitor,
+                            subq_total_profit.c.account_transaction,
+                            subq_total_profit.c.total_profit,
+                        )
+                        .all()
+                    )
+
+                    subq_total_volume = (
+                        db.query(
+                            LotInformation.account_monitor_id.label("account_monitor"),
+                            LotInformation.account_transaction_id.label("account_transaction"),
+                            func.sum(LotInformation.volume).label("total_volume"),
+                        )
+                        .filter(LotInformation.account_transaction_id == item["username"], LotInformation.status == "Lenh_thi_truong", LotInformation.type == "RUNNING")
+                        .group_by(LotInformation.account_monitor_id, LotInformation.account_transaction_id)
+                        .subquery()
+                    )
+
+                    result_total_volume = (
+                        db.query(
+                            subq_total_volume.c.account_monitor,
+                            subq_total_volume.c.account_transaction,
+                            subq_total_volume.c.total_volume
+                        )
+                        .all()
+                    )
+
+                    profit_map = {
+                        (monitor, transaction): profit
+                        for monitor, transaction, profit in result_total_profit
+                    }
+                    
+                    for row in result_total_volume:
+                        profit = profit_map.get((row.account_monitor, row.account_transaction), 0)
+                        data_pnl_monitor = db.query(MultiAccountPnL).filter(MultiAccountPnL.login == row.account_monitor).order_by(MultiAccountPnL.id.desc()).first()
+                        break_even.append({
+                            "account_monitor": row.account_monitor,
+                            "account_transaction": row.account_transaction,
+                            "total_volume": row.total_volume,
+                            "total_profit": profit,
+                            "pnl_break_even": profit / (row.total_volume * 100) if row.total_volume != 0 else 0,
+                            "pnl": data_pnl_monitor.total_pnl if data_pnl_monitor else 0
+                        })
+
+                emit_sync("position_message", {"acc": acc_data, "positions": results, "break_even": break_even})
                 print("✅ theo dõi tick đã vào lệnh trên MT5")
             except Exception as e:
                 db.rollback()

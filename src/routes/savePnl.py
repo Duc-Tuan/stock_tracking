@@ -80,7 +80,6 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                 account_info = mt5.account_info()
                 positions = mt5.positions_get()
 
-                # symbol_pnls = defaultdict(float)
                 symbol_pnls_cvs_xlsx = {}
                 symbol_pnls = {}
                 for pos in positions:
@@ -97,7 +96,8 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                         if symbol not in symbol_pnls:
                             symbol_pnls[symbol] = {
                                 "current_price": 0.0,
-                                "type": "BUY" if pos.type == 0 else "SELL"
+                                "type": "BUY" if pos.type == 0 else "SELL",
+                                "profit": pos.profit
                             }
                         # Cộng dồn giá
                         symbol_pnls[symbol]["current_price"] += current_price
@@ -111,18 +111,18 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                 total_swap_difference = swap_difference(db, account_info)
                 total_pnl = account_info.profit + abs(total_swap_difference)
 
-                by_symbol_json_csv_file = json.dumps({k: round(v, 6) for k, v in symbol_pnls_cvs_xlsx.items()})
+                # by_symbol_json_csv_file = json.dumps({k: round(v, 6) for k, v in symbol_pnls_cvs_xlsx.items()})
                 by_symbol_json = json.dumps(symbol_pnls)
                 num_positions = len(positions) if positions else 0
 
                 if account_info:
-                    data = {
-                        "login": account_info.login,
-                        "time": datetime.now().isoformat(),
-                        "total_pnl": total_pnl,
-                        "by_symbol": by_symbol_json_csv_file,
-                        "num_positions": num_positions
-                    }
+                    # data = {
+                    #     "login": account_info.login,
+                    #     "time": datetime.now().isoformat(),
+                    #     "total_pnl": total_pnl,
+                    #     "by_symbol": by_symbol_json_csv_file,
+                    #     "num_positions": num_positions
+                    # }
                     log = MultiAccountPnL(
                         login=account_info.login,
                         total_pnl=total_pnl,
@@ -138,10 +138,11 @@ def monitor_account(mt5_path, account_name, interval, queue, stop_event):
                     all_accounts_data.append({
                         "login": account_info.login,
                         "total_pnl":total_pnl,
-                        "by_symbol":by_symbol_json
+                        "by_symbol":by_symbol_json,
+                        "time": datetime.now().isoformat(),
                     })
 
-                    queue.put(data)  # 👉 gửi về process ghi log
+                    # queue.put(data)  # 👉 gửi về process ghi log
                     print(f"✅ Đã ghi PnL {account_info.login}: giá chưa tính swap {account_info.profit}, giá đã tính swap {total_pnl} với {num_positions} lệnh, swap chênh lệch: {total_swap_difference}", f'info: {symbol_pnls}')
                 
                 emit_chat_message_sync("chat_message", all_accounts_data)

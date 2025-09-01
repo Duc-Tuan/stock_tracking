@@ -27,8 +27,8 @@ def start_mt5_monitor():
         signal.signal(signal.SIGTERM, handle_exit)
 
         # Ghi dữ liệu vào file .xlsx, .csv
-        log_proc = Process(target=logger_process, args=(queue, stop_event))
-        log_proc.start()
+        # log_proc = Process(target=logger_process, args=(queue, stop_event))
+        # log_proc.start()
 
         # Chạy tiến trình theo dõi PNL
         processes = []
@@ -43,14 +43,14 @@ def start_mt5_monitor():
         processes.append(swap_proc)
 
         # Gửi email định kỳ 7h hằng ngày
-        email_proc = Process(target=run_schedule_email)
-        email_proc.start()
-        processes.append(email_proc)
+        # email_proc = Process(target=run_schedule_email)
+        # email_proc.start()
+        # processes.append(email_proc)
         
         for p in processes:
             p.join()
             
-        log_proc.join()
+        # log_proc.join()
     except KeyboardInterrupt:
         print("\n🛑 Nhận Ctrl+C – Đang dừng các tiến trình con...")
     finally:
