@@ -10,19 +10,9 @@ def tick_publisher(name, cfg, pub_queue, stop_event, monitor_queue):
     if not mt5.initialize(path=cfg["path"]):
         print(f"[{name}] ❌ Không khởi tạo được MT5 ở {cfg['path']}")
         return
-    
-    # Lấy tất cả position đang mở
-    positions = mt5.positions_get()
-
-    if positions is None:
-        print("❌ Không có lệnh nào đang mở")
-        symbols = []
-    else:
-        # Nếu positions là list of dict, lấy symbol đúng cách
-        symbols = list({p.symbol for p in positions})  # dùng set để loại trùng
 
     # Khởi tạo last_time_map cho các symbol đang có lệnh mở
-    last_time_map = {sym: None for sym in symbols}
+    last_time_map = {}
 
     base_interval = 0.05  # interval mặc định
     min_interval = 0.01   # nhanh nhất
@@ -36,6 +26,18 @@ def tick_publisher(name, cfg, pub_queue, stop_event, monitor_queue):
 
     while not stop_event.is_set():
         try:
+            # Lấy positions mới nhất
+            positions = mt5.positions_get()
+            if positions is None:
+                symbols = []
+            else:
+                symbols = list({p.symbol for p in positions})
+            
+            # Cập nhật last_time_map cho symbol mới
+            for sym in symbols:
+                if sym not in last_time_map:
+                    last_time_map[sym] = None
+                
             tick_received = False
             for symbol in symbols:
                 try:

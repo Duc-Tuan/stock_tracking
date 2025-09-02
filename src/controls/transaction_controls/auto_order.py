@@ -126,74 +126,81 @@ def update_type_lot_type(id):
         db.rollback()
         print(f"Lỗi ở lệnh ngược update_type_lot_type: {e}")
     finally:
+        lot = db.query(LotInformation).filter(LotInformation.id == id).first()
+        emit_sync("order_filled", {"status": "close_order", "data": model_to_dict(lot)})
         db.close()
 
 def close_send(dataSymbol: SymbolTransaction):
-    db = SessionLocal()
+    try: 
+        db = SessionLocal()
 
-    # Lấy thông tin lệnh đang mở
-    deviation = 30
-    ticket_id = dataSymbol.id_transaction
-    
-    position = mt5.positions_get(ticket=ticket_id)
-    if not position:
-        return {"error": f"Không tìm thấy lệnh với ticket {ticket_id}"}
+        # Lấy thông tin lệnh đang mở
+        deviation = 30
+        ticket_id = dataSymbol.id_transaction
+        
+        position = mt5.positions_get(ticket=ticket_id)
+        if not position:
+            return {"error": f"Không tìm thấy lệnh với ticket {ticket_id}"}
 
-    pos = position[0]
+        pos = position[0]
 
-    # Xác định loại lệnh đóng (ngược lại)
-    close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+        # Xác định loại lệnh đóng (ngược lại)
+        close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
 
-    # Lấy giá hiện tại
-    tick = mt5.symbol_info_tick(pos.symbol)
-    if tick is None:
-        return {"error": f"Không lấy được giá cho {pos.symbol}"}
+        # Lấy giá hiện tại
+        tick = mt5.symbol_info_tick(pos.symbol)
+        if tick is None:
+            return {"error": f"Không lấy được giá cho {pos.symbol}"}
 
-    price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
+        price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
 
-    # Tạo request đóng lệnh
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": pos.symbol,
-        "volume": pos.volume,
-        "type": close_type,
-        "position": pos.ticket,
-        "price": price,
-        "deviation": deviation,
-        "magic": pos.magic,
-        "comment": f"Close order {pos.ticket}",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
+        # Tạo request đóng lệnh
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": pos.symbol,
+            "volume": pos.volume,
+            "type": close_type,
+            "position": pos.ticket,
+            "price": price,
+            "deviation": deviation,
+            "magic": pos.magic,
+            "comment": f"Close order {pos.ticket}",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
 
-    # Gửi lệnh đóng
-    result = mt5.order_send(request)
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
-    else:
-        db.query(SymbolTransaction).filter(SymbolTransaction.id == dataSymbol.id).update({"status": "cancelled"})
-        db.query(OrdersTransaction).filter(OrdersTransaction.id == dataSymbol.id).update({"status": "cancelled"})
+        # Gửi lệnh đóng
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
+        else:
+            db.query(SymbolTransaction).filter(SymbolTransaction.id == dataSymbol.id).update({"status": "cancelled"})
+            db.query(OrdersTransaction).filter(OrdersTransaction.id == dataSymbol.id).update({"status": "cancelled"})
 
-        db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket_id).delete()
+            db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket_id).delete()
 
-        dataDeal = DealTransaction(
-            username_id = dataSymbol.username_id,
-            account_id = dataSymbol.account_transaction_id,
-            symbol = dataSymbol.symbol,
-            position_type = dataSymbol.type,
-            volume = dataSymbol.volume,
-            open_price = dataSymbol.price_open,
-            close_price = price,
-            open_time = datetime.fromtimestamp(pos.time),
-            profit = pos.profit,
-            swap = pos.swap,
-            comment = pos.comment,
-        )
-        db.add(dataDeal)
+            dataDeal = DealTransaction(
+                username_id = dataSymbol.username_id,
+                account_id = dataSymbol.account_transaction_id,
+                symbol = dataSymbol.symbol,
+                position_type = dataSymbol.type,
+                volume = dataSymbol.volume,
+                open_price = dataSymbol.price_open,
+                close_price = price,
+                open_time = datetime.fromtimestamp(pos.time),
+                profit = pos.profit,
+                swap = pos.swap,
+                comment = pos.comment,
+            )
+            db.add(dataDeal)
 
-        db.commit()
-        db.close()
+            db.commit()
         return {"symbol": dataSymbol.symbol, "status": "success", "message": result}
+    except Exception as e:
+        db.rollback()
+        print(f"Lỗi ở close_send: {e}")
+    finally:
+        db.close()
 
 def run_order_close(dataLot: LotInformation):
     mt5_connect(dataLot.account_transaction_id)

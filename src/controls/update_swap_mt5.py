@@ -1,10 +1,7 @@
 import MetaTrader5 as mt5
 from src.models.model import SessionLocal
-from src.models.modelAccMt5 import AccountMt5
 from src.models.modelSwapMt5 import SwapMt5
 from datetime import datetime, timedelta
-from schedule import Scheduler
-import asyncio
 import MetaTrader5 as mt5
 import time
 from src.utils.options import SEND_TIME_UPDATE_SWAP_SUMMER, SEND_TIME_UPDATE_SWAP_WINTER
