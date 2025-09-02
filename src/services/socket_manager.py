@@ -20,14 +20,13 @@ def emit_sync(event: str, data):
         asyncio.run(sio.emit(event, data))
 
 def emit_chat_message_sync(listen: str, data):
-    for item in data:
-        symbol_id = item['login']
-        room = f"chat_message_{symbol_id}"
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(sio.emit(listen, item, room=room))
-            else:
-                loop.run_until_complete(sio.emit(listen, item, room=room))
-        except RuntimeError:
-            asyncio.run(sio.emit(listen, item, room=room))
+    symbol_id = data['login']
+    room = f"chat_message_{symbol_id}"
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(sio.emit(listen, data, room=room))
+        else:
+            loop.run_until_complete(sio.emit(listen, data, room=room))
+    except RuntimeError:
+        asyncio.run(sio.emit(listen, data, room=room))

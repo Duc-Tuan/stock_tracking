@@ -11,6 +11,7 @@ from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.services.socket_manager import emit_sync
 from sqlalchemy import func
 import json
+import queue as pyqueue
 
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect(account_name: int):
@@ -18,7 +19,7 @@ def mt5_connect(account_name: int):
     # Đóng kết nối cũ nếu đang mở
     mt5.shutdown()
     # Kết nối mới
-    if not mt5.initialize(path=acc["path"]):
+    if not mt5.initialize(path=acc['path']):
         raise Exception(f"Không connect được MT5 {account_name}. Lỗi: {mt5.last_error()}")
     return True
 
@@ -95,15 +96,21 @@ def run_order(data: SymbolTransaction):
         db.close()
         return result
 
-def auto_position(account_name, interval, stop_event):
+def auto_position(name, cfg, queue, stop_event, pub_queue):
+    mt5_connect(name)
     try: 
         while not stop_event.is_set():
-            mt5_connect(account_name)
             db = SessionLocal()
             try:
-                dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
+                queue.get(timeout=1)
+            except pyqueue.Empty:
+                # không có tín hiệu mới → bỏ qua vòng lặp
+                continue
+            try:
 
                 account_info = mt5.account_info()
+
+                dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
 
                 existing = db.query(AccountsTransaction).filter(AccountsTransaction.username == int(account_info.login)).all()
                 new_data = AccountsTransaction(
@@ -215,15 +222,12 @@ def auto_position(account_name, interval, stop_event):
                             "pnl_break_even": profit / (row.total_volume * 100) if row.total_volume != 0 else 0,
                             "pnl": data_pnl_monitor.total_pnl if data_pnl_monitor else 0
                         })
-
                 emit_sync("position_message", {"acc": acc_data, "positions": results, "break_even": break_even})
-                print("✅ theo dõi tick đã vào lệnh trên MT5")
             except Exception as e:
                 db.rollback()
-                print(f"[{account_name}] ❌ Lỗi trong monitor_account: {e}")
+                print(f"[{name}] ❌ Lỗi trong monitor_account: {e}")
             finally:
                 db.close()
-                time.sleep(interval)
     except KeyboardInterrupt:
         print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")
     finally:

@@ -40,3 +40,4 @@ def replace_suffix_with_m(sym: str) -> str:
     else:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm") + "c"
+
