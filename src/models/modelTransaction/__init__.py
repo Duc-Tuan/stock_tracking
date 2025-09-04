@@ -1,6 +1,5 @@
 from src.models.modelAccMt5 import AccountMt5
 from src.models.modelMultiAccountPnL import MultiAccountPnL
-from src.models.modelsPnl import PnLLog
 from src.models.modelsUser import UserModel
 from src.models.modelsUserToken import UserToken
 from src.models.modelSwapMt5 import SwapMt5
@@ -14,11 +13,13 @@ from src.models.modelTransaction.position_transaction_model import PositionTrans
 from src.models.modelTransaction.priceTick_transaction_model import PriceTickTransaction
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 
+from src.models.modelBoot.accounts_transaction_model import AccountsBoot
+from src.models.modelBoot.position_transaction_model import PositionBoot
+
 
 __all__ = [
     "AccountMt5",
     "MultiAccountPnL",
-    "PnLLog",
     "UserModel",
     "UserToken",
     "SwapMt5",
@@ -28,5 +29,7 @@ __all__ = [
     "DealTransaction",
     "OrdersTransaction",
     "PriceTickTransaction",
-    "PositionTransaction"
+    "PositionTransaction",
+    "AccountsBoot",
+    "PositionBoot"
 ]

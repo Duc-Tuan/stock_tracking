@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
+import time
 import signal
 from multiprocessing import Manager, Process, Queue, freeze_support,Event
 

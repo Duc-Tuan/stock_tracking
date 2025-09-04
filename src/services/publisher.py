@@ -157,3 +157,82 @@ def monitor(monitor_queue, stop_event):
                 stats[k]["ticks"] = 0
 
             last_log_time = now
+
+
+# ================== PUBLISHER ["EURUSD", "GBPUSD", "XAUUSD", "USDJPY"] ==================
+def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue):
+    """
+    Lấy tick từ 4 cặp cố định và push vào queue.
+    """
+    if not mt5.initialize(path=cfg["path"]):
+        print(f"[{name}] ❌ Không khởi tạo được MT5 ở {cfg['path']}")
+        return
+
+    # Danh sách cặp cố định cần theo dõi
+    symbols = ["EURUSDm", "GBPUSDm", "XAUUSDm", "USDJPYm"]
+
+    last_time_map = {sym: None for sym in symbols}
+
+    base_interval = 0.05
+    min_interval = 0.01
+    max_interval = 0.2
+    interval = base_interval
+    idle_counter = 0
+
+    last_log_time = time.time()
+    tick_count = 0
+
+    while not stop_event.is_set():
+        try:
+            tick_received = False
+            for symbol in symbols:
+                try:
+                    # lấy tick mới nhất (chỉ cần 1 tick gần nhất thay vì copy nhiều)
+                    tick = mt5.symbol_info_tick(symbol)
+                    if tick is None:
+                        continue
+
+                    # kiểm tra thời gian tick để tránh gửi trùng
+                    if last_time_map[symbol] is None or tick.time > last_time_map[symbol]:
+                        last_time_map[symbol] = tick.time
+                        tick_received = True
+                        tick_count += 1
+                        
+                        # gửi ra queue giá thị trường
+                        pub_queue.put({
+                            "source": name,
+                            "type": "tick",
+                            "symbol": symbol,
+                            "time": tick.time,
+                            "bid": tick.bid,
+                            "ask": tick.ask,
+                            "last": tick.last,
+                        })
+                except Exception as e:
+                    print(f"[{name}] ❌ Error get tick {symbol}: {e}")
+                
+            # 🔄 Adaptive sleep
+            if tick_received:
+                idle_counter = 0
+                interval = max(min_interval, interval * 0.7)
+            else:
+                idle_counter += 1
+                if idle_counter > 5:
+                    interval = min(max_interval, interval * 1.3)
+
+            # 📊 Monitor log mỗi 1s
+            now = time.time()
+            if now - last_log_time >= 1.0:
+                monitor_queue.put((
+                    "Publisher", "ALL",
+                    {"ticks": tick_count, "queue": pub_queue.qsize(), "interval": interval}
+                ))
+                tick_count = 0
+                last_log_time = now
+
+            stop_event.wait(interval)
+        except Exception as e:
+            print(f"[Publisher] Error: {e}")
+            time.sleep(interval)
+
+    print("🛑 Tick publisher stopped.")

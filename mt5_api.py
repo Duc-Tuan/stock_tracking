@@ -57,6 +57,7 @@ symbol_clients = defaultdict(set)
 async def connect(sid, environ):
     query = parse_qs(environ.get('QUERY_STRING', ''))
     symbol_id = query.get('symbol_id', [None])[0]
+    symbolName = query.get('symbol_name', [None])[0]
     token = query.get('token', [None])[0]
 
     symbol_clients[symbol_id].add(sid)
@@ -67,8 +68,8 @@ async def connect(sid, environ):
     
     if symbol_id:
         # Lưu vào room để sau này emit riêng
-        # await sio.enter_room(sid, f"position_message_{user.id}")
         await sio.enter_room(sid, f"chat_message_{symbol_id}")
+        await sio.enter_room(sid, f"boot_opposition_{symbolName}")
 
 @sio.event
 async def disconnect(sid):

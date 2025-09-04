@@ -8,6 +8,7 @@
 <!-- Tiến trình chạy theo dõi pnl, vào/đóng lệnh -->
 # python src/services/mt5.py
 # python src/services/monitor_transaction.py
+# python src/services/boot_opposition.py
 
 # uvicorn asgi:app --host 0.0.0.0 --port 8000 
 <!-- --workers 6 -->

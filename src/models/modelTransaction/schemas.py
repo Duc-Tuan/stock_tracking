@@ -78,6 +78,22 @@ class CloseFastLotItem(BaseModel):
 class CloseFastLotRequest(BaseModel):
     data: List[CloseFastLotItem]
 
+class OrderData(BaseModel):
+    price: float
+    sl: float
+    tp: float
+    symbol: Literal["GBPUSD", "EURUSD", "XAUUSD", "USDJPY"]
+    type: Literal[0, 1, 2, 3, 4, 5]
+    volume: float
+
+class OrderBootItem(BaseModel):
+    username: int  
+    data: OrderData
+    type: str
+
+class OpenOrderBootRequest(BaseModel):
+    data: List[OrderBootItem]
+
 class getLots(BaseModel):
     start_time: int
     end_time: int
