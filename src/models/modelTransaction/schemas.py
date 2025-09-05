@@ -91,8 +91,9 @@ class OrderBootItem(BaseModel):
     data: OrderData
     type: str
 
-class OpenOrderBootRequest(BaseModel):
-    data: List[OrderBootItem]
+class CloseOrderBootItem(BaseModel):
+    id: int
+    serverName: int
 
 class getLots(BaseModel):
     start_time: int

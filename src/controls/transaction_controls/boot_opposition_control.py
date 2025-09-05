@@ -26,46 +26,45 @@ def boot_auto_opposition(name, cfg, queue, stop_event, pub_queue):
             try:
                 item = queue.get(timeout=1)
             except pyqueue.Empty:
-                # không có gì trong queue -> tiếp tục vòng lặp
                 pass
 
-            positions = mt5.positions_get()
-
-            if positions:
-                for pos in positions:
-                    existing = db.query(PositionBoot).filter(PositionBoot.id_transaction == int(pos.ticket)).all()
-
-                    new_data = PositionBoot(
-                        id_transaction = pos.ticket,
-                        username = int(name),
-                        position_type = pos.type,
-                        symbol = pos.symbol,
-                        volume = pos.volume,
-                        open_price = pos.price_open,
-                        current_price =  pos.price_current,
-                        sl = pos.sl,
-                        tp = pos.tp,
-                        swap = pos.swap,
-                        profit = pos.profit,
-                        commission = pos.profit,
-                        magic_number = pos.magic,
-                        comment = pos.comment
-                    )
-
-                    if (len(existing) == 0):
-                        db.add(new_data)
-                    else:
-                        db.query(PositionBoot).filter(PositionBoot.id_transaction == int(pos.ticket)).update({
-                            "open_price": pos.price_open,
-                            "current_price":  pos.price_current,
-                            "sl": pos.sl,
-                            "tp": pos.tp,
-                            "swap": pos.swap,
-                            "profit": pos.profit,
-                        })
-                    db.commit()
 
             try:
+                positions = mt5.positions_get()
+                if positions:
+                    for pos in positions:
+                        existing = db.query(PositionBoot).filter(PositionBoot.id_transaction == int(pos.ticket)).all()
+
+                        new_data = PositionBoot(
+                            id_transaction = pos.ticket,
+                            username = int(name),
+                            position_type = pos.type,
+                            symbol = pos.symbol,
+                            volume = pos.volume,
+                            open_price = pos.price_open,
+                            current_price =  pos.price_current,
+                            sl = pos.sl,
+                            tp = pos.tp,
+                            swap = pos.swap,
+                            profit = pos.profit,
+                            commission = pos.profit,
+                            magic_number = pos.magic,
+                            comment = pos.comment
+                        )
+
+                        if (len(existing) == 0):
+                            db.add(new_data)
+                        else:
+                            db.query(PositionBoot).filter(PositionBoot.id_transaction == int(pos.ticket)).update({
+                                "open_price": pos.price_open,
+                                "current_price":  pos.price_current,
+                                "sl": pos.sl,
+                                "tp": pos.tp,
+                                "swap": pos.swap,
+                                "profit": pos.profit,
+                            })
+                        db.commit()
+                        
                 account_info = mt5.account_info()
 
                 if (account_info):
