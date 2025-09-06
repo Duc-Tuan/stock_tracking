@@ -27,3 +27,4 @@ terminals_transaction_boot = {
         "server": "Exness-MT5Trial7",
     },
 }
+

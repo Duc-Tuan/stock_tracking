@@ -4,9 +4,10 @@ from src.models.model import SessionLocal
 from src.models.modelTransaction.schemas import CloseFastLotRequest, OrderBootItem, CloseOrderBootItem
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelBoot.position_transaction_model import PositionBoot
-
+from src.models.modelBoot.orders_transaction_model import OrdersBoot
+from datetime import datetime
 from src.controls.transaction_controls.auto_order import run_order_close
-
+from sqlalchemy import func
 import MetaTrader5 as mt5
 from src.services.terminals_transaction import terminals_transaction_boot
 from src.utils.fund import replace_suffix_with_m
@@ -89,7 +90,7 @@ def run_boot_send_order(data: OrderBootItem):
             print(f"✅ Vào lệnh thành công! Ticket: {result.order}")
 
     except Exception as e:
-        print(f"❌ Lỗi trong đóng lệnh nhanh: {e}") 
+        print(f"❌ Lỗi trong vào lệnh: {e}") 
     finally:
         # Đóng kết nối
         mt5.shutdown()
@@ -148,6 +149,20 @@ def run_boot_close_order(data: CloseOrderBootItem):
             raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
         else:
             db.query(PositionBoot).filter(PositionBoot.id_transaction == ticket_id).delete(synchronize_session=False)
+            order_data = OrdersBoot(
+                id_transaction = pos.ticket,
+                account_id = data.serverName,
+                symbol = pos.symbol,
+                order_type = close_type,
+                volume = pos.volume,
+                price = price,
+                sl = pos.sl,
+                tp = pos.tp,
+                profit = pos.profit,
+                status = "cancelled",
+                user_id = 1
+            )
+            db.add(order_data)
             db.commit()
 
         return {"symbol": pos.volume, "status": "success", "message": result}
@@ -157,7 +172,6 @@ def run_boot_close_order(data: CloseOrderBootItem):
     finally:
         db.close()
 
-
 def close_order_boot(datas: List[CloseOrderBootItem]):
     results = []
     with ThreadPoolExecutor() as executor:
@@ -165,3 +179,56 @@ def close_order_boot(datas: List[CloseOrderBootItem]):
         for future in as_completed(futures):
             results.append(future.result())
     return results
+
+def get_close_order_boot(data, id):
+    db = SessionLocal()
+    try:
+        offset = (data['page'] - 1) * data['limit']
+
+        query = db.query(OrdersBoot)
+
+        # Danh sách các điều kiện động
+        filters = [OrdersBoot.user_id == id]
+
+        if data['status'] is not None:
+            filters.append(OrdersBoot.order_type == data['status'])
+
+        if data['acc_transaction'] is not None:
+            filters.append(OrdersBoot.account_id == int(data['acc_transaction']))
+
+        if data['start_time'] is not None:
+            start_dt = datetime.fromtimestamp(int(data['start_time']) / 1000)
+            filters.append(OrdersBoot.time >= start_dt)
+
+        if data['end_time'] is not None:
+            end_dt = datetime.fromtimestamp(int(data['end_time']) / 1000)
+            filters.append(OrdersBoot.time <= end_dt)
+            
+
+        total = db.query(func.count(OrdersBoot.id)).filter(*filters).scalar()
+
+        dataLots = (
+            query.filter(*filters)
+            .order_by(OrdersBoot.time.desc())
+            .offset(offset)
+            .limit(data['limit'])
+            .all()
+        )
+
+        # 🔹 Chuyển sang list dict và thêm trường mới
+        result_data = []
+        for item in dataLots:
+            item_dict = item.__dict__.copy()
+            item_dict.pop("_sa_instance_state", None)  # bỏ metadata SQLAlchemy
+            result_data.append(item_dict)
+
+        return {
+            "total": total,
+            "page": data['page'],
+            "limit": data['limit'],
+            "data": result_data
+        }
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()

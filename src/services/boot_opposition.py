@@ -8,13 +8,14 @@ from multiprocessing import Manager, Process, Queue, freeze_support,Event
 
 from src.services.terminals_transaction import terminals_transaction
 from src.services.publisher import monitor, tick_publisher_boot, dispatcher
-from src.controls.transaction_controls.boot_opposition_control import boot_auto_opposition
+from src.controls.transaction_controls.boot_opposition_control import boot_auto_opposition, close_sync_worker
 
 def start_mt5_monitor():
     freeze_support()
     stop_event = Event()
     pub_queue = Queue()
     monitor_queue = Queue()
+    close_sync_queue = Queue()
     processes = []
 
     # Quản lý queue riêng cho từng terminal
@@ -42,7 +43,7 @@ def start_mt5_monitor():
     # Worker mỗi terminal
     for name, cfg in terminals_transaction.items():
         # Publisher
-        publisher = Process(target=tick_publisher_boot, args=(name, cfg, pub_queue, stop_event, monitor_queue))
+        publisher = Process(target=tick_publisher_boot, args=(name, cfg, pub_queue, stop_event, monitor_queue, close_sync_queue))
         publisher.start()
         processes.append(publisher)
 
@@ -50,6 +51,11 @@ def start_mt5_monitor():
         p = Process(target=boot_auto_opposition, args=(name, cfg, q, stop_event, pub_queue))
         p.start()
         processes.append(p)
+
+    # thêm tiến trình sync close
+    syncer = Process(target=close_sync_worker, args=(terminals_transaction, close_sync_queue, stop_event))
+    syncer.start()
+    processes.append(syncer)
 
     try:
         # chờ các process kết thúc (nếu Ctrl+C -> handle_exit sẽ set stop_event)

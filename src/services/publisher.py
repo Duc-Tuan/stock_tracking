@@ -160,7 +160,7 @@ def monitor(monitor_queue, stop_event):
 
 
 # ================== PUBLISHER ["EURUSD", "GBPUSD", "XAUUSD", "USDJPY"] ==================
-def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue):
+def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue, close_sync_queue):
     """
     Lấy tick từ 4 cặp cố định và push vào queue.
     """
@@ -181,6 +181,9 @@ def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue):
 
     last_log_time = time.time()
     tick_count = 0
+
+    # --- track lệnh đang mở theo (symbol, type) ---
+    open_positions = {}
 
     while not stop_event.is_set():
         try:
@@ -211,6 +214,47 @@ def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue):
                 except Exception as e:
                     print(f"[{name}] ❌ Error get tick {symbol}: {e}")
                 
+            
+            # --- Detect orders ---
+            positions = mt5.positions_get()
+            current_positions = {}
+            if positions:
+                for pos in positions:
+                    key = (pos.symbol, pos.type)
+                    current_positions[key] = {
+                        "symbol": pos.symbol,
+                        "volume": pos.volume,
+                        "type": pos.type
+                    }
+           
+            # detect closed
+            closed_positions = set(open_positions.keys()) - set(current_positions.keys())
+            for symbol, pos_type in closed_positions:
+                print(f"[{name}] detect closed {symbol} type={pos_type}")
+                close_sync_queue.put({
+                    "action": "close",
+                    "account": name,
+                    "symbol": symbol,
+                    "type": pos_type,
+                })
+
+            # detect opened
+            opened_positions = set(current_positions.keys()) - set(open_positions.keys())
+            for symbol, pos_type in opened_positions:
+                pos_info = current_positions[(symbol, pos_type)]
+                print(f"[{name}] detect opened {symbol} type={pos_type}")
+                close_sync_queue.put({
+                    "action": "open",
+                    "account": name,
+                    "symbol": pos_info["symbol"],
+                    "volume": pos_info["volume"],
+                    "type": pos_info["type"],
+                    "synced": False
+                })
+
+            # update state
+            open_positions = current_positions
+
             # 🔄 Adaptive sleep
             if tick_received:
                 idle_counter = 0
