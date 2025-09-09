@@ -162,25 +162,40 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
 
                 break_even = []
                 for item in acc_data:
-
-                    subq_total_profit = (
+                    # Subquery đầu tiên: tính total_open_price theo lot_id
+                    subq_positions = (
                         db.query(
-                            SymbolTransaction.lot_id,
-                            LotInformation.account_monitor_id.label("account_monitor"),
-                            LotInformation.account_transaction_id.label("account_transaction"),
-                            func.sum(PositionTransaction.profit).label("total_profit"),
+                            SymbolTransaction.lot_id.label("lot_id"),
+                            func.sum(PositionTransaction.profit).label("total_open_price")
                         )
-                        .join(SymbolTransaction, SymbolTransaction.lot_id == LotInformation.id)
-                        .join(PositionTransaction, PositionTransaction.id_transaction == SymbolTransaction.id_transaction)  # thêm join
-                        .filter(LotInformation.account_transaction_id == item["username"], LotInformation.status == "Lenh_thi_truong", LotInformation.type == "RUNNING")
-                        .group_by(LotInformation.account_monitor_id, LotInformation.account_transaction_id, SymbolTransaction.account_transaction_id)
+                        .join(PositionTransaction, PositionTransaction.id_transaction == SymbolTransaction.id_transaction)
+                        .group_by(SymbolTransaction.lot_id)
                         .subquery()
                     )
 
+                    # Subquery thứ 2: group theo account_monitor_id, account_transaction_id, status_sl_tp
+                    subq_total_profit = (
+                        db.query(
+                            LotInformation.account_monitor_id.label("account_monitor"),
+                            LotInformation.account_transaction_id.label("account_transaction"),
+                            LotInformation.status_sl_tp.label("status_sl_tp"),
+                            func.sum(subq_positions.c.total_open_price).label("total_profit"),
+                        )
+                        .join(subq_positions, subq_positions.c.lot_id == LotInformation.id)
+                        .group_by(
+                            LotInformation.account_monitor_id,
+                            LotInformation.account_transaction_id,
+                            LotInformation.status_sl_tp
+                        )
+                        .subquery()
+                    )
+
+                    # Query cuối cùng: chỉ select ra các cột bạn muốn
                     result_total_profit = (
                         db.query(
                             subq_total_profit.c.account_monitor,
                             subq_total_profit.c.account_transaction,
+                            subq_total_profit.c.status_sl_tp,
                             subq_total_profit.c.total_profit,
                         )
                         .all()
@@ -190,10 +205,16 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                         db.query(
                             LotInformation.account_monitor_id.label("account_monitor"),
                             LotInformation.account_transaction_id.label("account_transaction"),
+                            LotInformation.status_sl_tp.label("account_start"),
                             func.sum(LotInformation.volume).label("total_volume"),
+                            func.count(LotInformation.id).label("record_count"),
                         )
-                        .filter(LotInformation.account_transaction_id == item["username"], LotInformation.status == "Lenh_thi_truong", LotInformation.type == "RUNNING")
-                        .group_by(LotInformation.account_monitor_id, LotInformation.account_transaction_id)
+                        .filter(LotInformation.account_transaction_id == item["username"], 
+                                LotInformation.status == "Lenh_thi_truong", 
+                                LotInformation.type == "RUNNING")
+                        .group_by(LotInformation.account_monitor_id, 
+                                  LotInformation.account_transaction_id,
+                                  LotInformation.status_sl_tp)
                         .subquery()
                     )
 
@@ -201,23 +222,27 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                         db.query(
                             subq_total_volume.c.account_monitor,
                             subq_total_volume.c.account_transaction,
-                            subq_total_volume.c.total_volume
+                            subq_total_volume.c.total_volume,
+                            subq_total_volume.c.account_start,
+                            subq_total_volume.c.record_count, 
                         )
                         .all()
                     )
 
                     profit_map = {
-                        (monitor, transaction): profit
-                        for monitor, transaction, profit in result_total_profit
+                        (monitor, transaction, sl_tp): profit
+                        for monitor, transaction, sl_tp, profit in result_total_profit
                     }
                     
                     for row in result_total_volume:
-                        profit = profit_map.get((row.account_monitor, row.account_transaction), 0)
+                        profit = profit_map.get((row.account_monitor, row.account_transaction, row.account_start), 0)
                         data_pnl_monitor = db.query(MultiAccountPnL).filter(MultiAccountPnL.login == row.account_monitor).order_by(MultiAccountPnL.id.desc()).first()
                         break_even.append({
                             "account_monitor": row.account_monitor,
                             "account_transaction": row.account_transaction,
                             "total_volume": row.total_volume,
+                            "type": row.account_start,
+                            "total_order": row.record_count,
                             "total_profit": profit,
                             "pnl_break_even": profit / (row.total_volume * 100) if row.total_volume != 0 else 0,
                             "pnl": data_pnl_monitor.total_pnl if data_pnl_monitor else 0
