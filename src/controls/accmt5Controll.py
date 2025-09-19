@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from src.models.modelAccMt5 import AccountMt5
+from src.models.modelSwapMt5 import SwapMt5
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from src.utils.options import RegisterRequestAccMt5
 import MetaTrader5 as mt5
 from src.controls.authControll import def_create_acc_mt5, get_user
 from jose import JWTError
-from fastapi.encoders import jsonable_encoder
+from sqlalchemy import desc
 
 
 def create_acc_mt5_controll(payload: RegisterRequestAccMt5,db, current_user):
@@ -45,6 +46,35 @@ def get_acc_mt5_controll(db, username: str):
         return result
     except Exception as e:
         db.rollback()
+    finally:
+        db.close()
+
+def get_swaps_controll(db, username: str):
+    try:
+        user = get_user(db, username)
+        if not user:
+            return False
+        # Lấy 10 bản ghi mới nhất theo id (hoặc created_at)
+        existing = (
+            db.query(SwapMt5)
+            .order_by(desc(SwapMt5.id))   # hoặc SwapMt5.created_at nếu có
+            .limit(10)
+            .all()
+        )
+
+
+        result = []
+        for row in existing:
+            row_dict = row.__dict__.copy()
+            row_dict.pop("_sa_instance_state", None)
+            row_dict.pop("password", None)
+            row_dict.pop("loginId", None)
+            result.append(row_dict)
+
+        return result
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 

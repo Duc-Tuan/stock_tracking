@@ -4,10 +4,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 
 import signal
 import time
-from multiprocessing import Process, Queue, freeze_support,Event, Manager
+from multiprocessing import Process, Queue, freeze_support, Event, Manager
 from src.routes.savePnl import monitor_account
 from src.services.publisher import monitor, tick_publisher, dispatcher
 from src.controls.transaction_controls.auto_order import auto_send_order_acc_transaction
+from src.controls.update_swap_mt5 import daily_swap_process
 
 terminals = {
     "263006287": {
@@ -15,7 +16,7 @@ terminals = {
     },
     "183459647": {
         "path": "C:/Program Files/MetaTrader 5 - acc 2/terminal64.exe",
-    },
+    }
 }
 
 def start_mt5_monitor():
@@ -46,6 +47,10 @@ def start_mt5_monitor():
     disp = Process(target=dispatcher, args=(pub_queue, queues_map, pnl_queues_map, stop_event))
     disp.start()
     processes.append(disp)
+
+    dailay_swap = Process(target=daily_swap_process, args=(terminals,))
+    dailay_swap.start()
+    processes.append(dailay_swap)
 
     # Chạy tiến trình theo dõi PNL
     for name, cfg in terminals.items():
