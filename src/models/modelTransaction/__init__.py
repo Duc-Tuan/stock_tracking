@@ -12,6 +12,8 @@ from src.models.modelTransaction.orders_transaction_model import OrdersTransacti
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.priceTick_transaction_model import PriceTickTransaction
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelTransaction.notification_transansaction import NotificationTransaction
+from src.models.modelTransaction.setting_close_odd_daily_risk import SettingCloseOddDailyRiskTransaction
 
 from src.models.modelBoot.accounts_transaction_model import AccountsBoot
 from src.models.modelBoot.position_transaction_model import PositionBoot
@@ -31,5 +33,7 @@ __all__ = [
     "PriceTickTransaction",
     "PositionTransaction",
     "AccountsBoot",
-    "PositionBoot"
+    "PositionBoot",
+    "NotificationTransaction",
+    "SettingCloseOddDailyRiskTransaction"
 ]

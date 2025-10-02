@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Enum, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, Enum, Float, ForeignKey, DateTime,Boolean
 from src.models.model import Base, relationship
 from datetime import datetime
 
@@ -17,6 +17,9 @@ class LotInformation(Base):
     status = Column(Enum("Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"), default='Lenh_thi_truong') 
     type = Column(Enum("CLOSE", "RUNNING"), default="RUNNING")
     status_sl_tp = Column(Enum("Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop"), default='Xuoi_Limit')
+    
+    IsUSD = Column(Boolean, default=False)
+    usd = Column(Integer, default=0)
 
     account = relationship("AccountsTransaction", back_populates="lotaccount")
     symbol_rel = relationship("SymbolTransaction", back_populates="lotaccount")

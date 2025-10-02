@@ -13,11 +13,19 @@ def emit_sync(event: str, data):
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
+            # Nếu đang trong main loop → tạo task bình thường
             asyncio.create_task(sio.emit(event, data))
         else:
+            # Nếu có loop nhưng chưa chạy → chạy đồng bộ
             loop.run_until_complete(sio.emit(event, data))
     except RuntimeError:
-        # Nếu chưa có event loop (vd: trong thread)
+        # Trường hợp gọi từ thread khác hoặc loop đã đóng
+        # try:
+        #     from mt5_api import sio, main_loop 
+        #     # Lấy loop chính toàn cục (nếu bạn có lưu lại khi start app)
+        #     asyncio.run_coroutine_threadsafe(sio.emit(event, data), main_loop)
+        # except Exception:
+        # fallback: tạo loop tạm và chạy
         asyncio.run(sio.emit(event, data))
 
 def emit_chat_message_sync(listen: str, data):

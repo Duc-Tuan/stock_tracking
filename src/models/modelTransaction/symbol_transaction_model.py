@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Boolean
 from src.models.model import Base, relationship
 from datetime import datetime
 
@@ -25,6 +25,7 @@ class SymbolTransaction(Base):
     status = Column(Enum('pending', 'filled', 'cancelled', 'rejected'), default='pending')
     type = Column(Enum('BUY', 'SELL'), default='BUY')
     time = Column(DateTime, default=datetime.utcnow)
+    is_odd = Column(Boolean, default=False)
 
     positions = relationship("PositionTransaction", back_populates="symbol_rel")
     deals = relationship("DealTransaction", back_populates="symbol_rel")

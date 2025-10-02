@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 from sqlalchemy.inspection import inspect
 import re
+from typing import Literal
 
 load_dotenv()
 SQLALCHEMY_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
@@ -25,6 +26,13 @@ class RegisterRequestAccMt5(BaseModel):
     username: int
     password: str
     server: str
+
+class UpdateRiskAccTransaction(BaseModel):
+    id_Risk: int = None
+    id_daily_risk: int = None
+    id_acc: int
+    monney_acc: int = None
+    type_acc: Literal["QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "COM", "SWWING" ,"VAY"] = None
 
 def object_as_dict(obj):
     return {

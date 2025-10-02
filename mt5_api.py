@@ -17,6 +17,10 @@ from src.routes.transaction.close_fast_lot import router as close_lot_router
 from src.routes.transaction.orderTransaction import router as order_close_router
 from src.routes.transaction.send_symbols_transaction import router as send_symbol_router
 from src.routes.transaction.position_transaction import router as position_transaction_router
+from src.routes.transaction.setting_risk import router as setting_risk_transaction_router
+from src.routes.transaction.notification import router as notification_router
+from src.routes.transaction.odd_order import router as odd_order_router
+
 from src.services.socket_manager import sio
 from src.controls.authControll import get_current_user
 # Load env
@@ -28,6 +32,9 @@ Base.metadata.create_all(bind=engine)
 
 # Tạo FastAPI app
 app = FastAPI()
+
+# lưu loop chính toàn cục
+main_loop = asyncio.get_event_loop()
 
 # Cho phép CORS
 app.add_middleware(
@@ -50,6 +57,10 @@ app.include_router(close_lot_router)
 app.include_router(order_close_router)
 app.include_router(send_symbol_router)
 app.include_router(position_transaction_router)
+
+app.include_router(setting_risk_transaction_router)
+app.include_router(notification_router)
+app.include_router(odd_order_router)
 
 symbol_clients = defaultdict(set)
 

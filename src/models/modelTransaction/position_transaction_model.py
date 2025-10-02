@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, Boolean
 from src.models.model import Base, relationship
 from datetime import datetime
 
@@ -23,6 +23,7 @@ class PositionTransaction(Base):
     commission = Column(Float, default=0)
     magic_number = Column(Integer) #Dùng để phân biệt lệnh theo bot EA (Expert Advisor)
     comment = Column(Text)
+    is_odd = Column(Boolean, default=False)
 
     account = relationship("AccountsTransaction", back_populates="positions")
     symbol_rel = relationship("SymbolTransaction", back_populates="positions")

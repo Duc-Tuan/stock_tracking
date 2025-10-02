@@ -71,12 +71,17 @@ class SymbolTransactionRequest(BaseModel):
     type: Literal["CLOSE", "RUNNING"]
     by_symbol:  List[symbolItem]
     status_sl_tp: Literal["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop"]
+    IsUSD: bool
+    usd: int
+
+class SettingRiskTransactionRequest(BaseModel):
+    risk: float
 
 class CloseFastLotItem(BaseModel):
     id: int
 
 class CloseFastLotRequest(BaseModel):
-    data: List[CloseFastLotItem]
+    data: List[CloseFastLotItem] = []
 
 class OrderData(BaseModel):
     price: float
@@ -111,3 +116,56 @@ class PatchotRequest(BaseModel):
     id: int
     stop_loss: float
     take_profit: float
+
+
+class DealTransactionSchema(BaseModel):
+    id: int
+    symbol: str
+    volume: float
+    profit: float
+    open_time: datetime
+    close_time: datetime
+    position_type: str
+    open_price: float
+    close_price: float
+    account_id: int
+
+    class Config:
+        from_attributes = True
+
+class NotificationTransactionSchema(BaseModel):
+    id: int
+    loginId: int
+    account_transaction_id: int
+    isRead: bool
+    is_send: bool
+    symbol: str
+    total_volume: float | None
+    profit: float
+    monney_acctransaction: float
+    total_order: int
+    risk: float
+    type: str
+    time: datetime
+    daily_risk: float
+    type_notification: Literal["daily", "risk"]
+
+    # Trường mới: danh sách deal con
+    deals: List[DealTransactionSchema] = []
+
+    class Config:
+        from_attributes = True
+
+class OddOrderRequest(BaseModel):
+    price: float | None
+    id_notification: int
+    symbol: str
+    lot: float
+    order_type: Literal["BUY", "SELL"]
+    account_transaction_id: int
+    lot_id: int
+
+class CloseOddOrderRequest(BaseModel):
+    ticket: int
+    vloume: float
+    acc_transaction: int

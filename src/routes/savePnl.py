@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
-from src.utils.stop import stopDef, swap_difference
+from src.utils.stop import swap_difference
 from src.services.socket_manager import emit_chat_message_sync
 
 def monitor_account(name, cfg, queue, stop_event, pub_queue):
@@ -19,10 +19,6 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
     session: Session = SessionLocal()
     try: 
         while not stop_event.is_set():
-            if stopDef(datetime.now()):
-                print("⏸️ StopDef active: Dừng ghi log và theo dõi PnL vào thời điểm hiện tại")
-                time.sleep(60)
-                continue
             try:
                 queue.get(timeout=1)
             except pyqueue.Empty:
@@ -40,12 +36,14 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     total_pnl = 0.0
                     num_positions = 0
                     by_symbol = {}
+                    symbols_acc_monitor = []
 
                     for pos in positions:
                         tick = mt5.symbol_info_tick(pos.symbol)
 
                         num_positions += 1
                         total_pnl += pos.profit
+                        symbols_acc_monitor.append(pos.symbol)
 
                         if tick:
                             by_symbol[pos.symbol] = {
@@ -58,6 +56,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     total_pnl = account_info.profit + abs(total_swap_difference)
 
                     by_symbol_json = json.dumps(by_symbol)
+                    by_symbol_json_acc_monitor = json.dumps(symbols_acc_monitor)
 
                     existing = session.query(AccountMt5).filter(AccountMt5.username == account_info.login).all()
                     if (len(existing) == 0):
@@ -66,7 +65,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                             password='', 
                             loginId=1, 
                             server=account_info.server, 
-                            by_symbol=by_symbol_json
+                            by_symbol=by_symbol_json_acc_monitor
                         )
                         session.add(new_data)
 

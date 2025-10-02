@@ -16,11 +16,7 @@ def run_lots(id_lot: int, id_user: int):
     db = SessionLocal()
     try:
         dataLots = db.query(LotInformation).filter(LotInformation.id == id_lot, LotInformation.username_id == id_user, LotInformation.status == "Lenh_thi_truong").order_by(LotInformation.time.desc()).all()
-        results = []
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(run_order_close, dataLot) for dataLot in dataLots]
-            for future in as_completed(futures):
-                results.append(future.result())
+        results = [run_order_close(dataLot) for dataLot in dataLots]
         return results
     except Exception as e:
         db.rollback()
@@ -39,11 +35,7 @@ def mt5_connect(account_name: int):
     return True
 
 def close_fast_lot_contronlls(datas: CloseFastLotRequest, current_user_id: int):
-    results = []
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(run_lots, data.id, current_user_id) for data in datas]
-        for future in as_completed(futures):
-            results.append(future.result())
+    results = [run_lots(data.id, current_user_id) for data in datas]
     return results
 
 def run_boot_send_order(data: OrderBootItem):

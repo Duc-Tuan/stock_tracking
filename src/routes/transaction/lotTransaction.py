@@ -1,6 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from src.middlewares.authMiddleware import get_db
-from sqlalchemy.orm import Session
 from src.controls.authControll import get_current_user
 from src.models.modelTransaction.schemas import SymbolTransactionRequest, DeleteLotRequest, PatchotRequest
 from src.controls.transaction_controls.place_market_lot import place_market_lot, get_symbols_db, delete_lot_transaction, patch_lot_transaction
@@ -10,6 +8,7 @@ router = APIRouter()
 
 @router.get("/lots-transaction")
 def post_lot_transaction( 
+    statusType: Literal["RUNNING"] = Query(None),
     start_time: int = Query(None),
     end_time: int = Query(None),
     status: Literal["Xuoi_Limit", "Nguoc_Limit", "Xuoi_Stop", "Nguoc_Stop", "Lenh_thi_truong"] = Query(None),
@@ -29,6 +28,7 @@ def post_lot_transaction(
             "status": status,
             "page": page,
             "limit": limit,
+            "statusType": statusType
         }
         return get_symbols_db(data, current_user.id)
     except Exception as e:

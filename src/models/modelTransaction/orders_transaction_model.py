@@ -14,6 +14,7 @@ class OrdersTransaction(Base):
     price = Column(Float, nullable=False) 
     sl = Column(Float) # Mức dừng lỗ (Stop Loss)
     tp = Column(Float) # Mức chốt lời (Take Profit)
+    profit = Column(Float, default=0)
     time = Column(DateTime, default=datetime.utcnow)
     status = Column(Enum('pending', 'filled', 'cancelled', 'rejected'), default='pending')
 

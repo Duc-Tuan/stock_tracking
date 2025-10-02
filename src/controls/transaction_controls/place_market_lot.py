@@ -2,6 +2,7 @@ from src.models.modelTransaction.schemas import SymbolTransactionRequest, Patcho
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
+from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
 from sqlalchemy import func
@@ -32,7 +33,7 @@ def replace_suffix_with_m(sym: str) -> str:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm") + "m"
 
-def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
+def order_send_mt5(is_odd: bool | None, price: float | None, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
     symbol_replace = replace_suffix_with_m(symbol)
 
     symbol_info = mt5.symbol_info(symbol_replace)
@@ -59,6 +60,13 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
 
     action_type = TRADE_ACTION_DEAL if order_type in ["BUY", "SELL"] else TRADE_ACTION_PENDING
 
+    # Nếu không có price thì lấy giá thị trường
+    if price is None:
+        if order_type == "BUY":
+            price = tick.ask
+        elif order_type == "SELL":
+            price = tick.bid
+
     request = {
         "action": action_type,
         "symbol": symbol_replace,
@@ -78,6 +86,7 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
     else:
         ticket_id = result.order
         profit = get_floating_profit(result.order)
+        is_odd_value = True if is_odd else False
         symbolSQL = SymbolTransaction(
             id_transaction= ticket_id,
             username_id = usename_id,
@@ -91,7 +100,8 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             contract_size = symbol_info.trade_contract_size,
             description= f"python-{symbol}",
             profit = profit,
-            status = 'filled'
+            status = 'filled',
+            is_odd = is_odd_value
         )
         order_transaction = OrdersTransaction(
             id_transaction= ticket_id,
@@ -102,7 +112,8 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, usena
             price = price,
             sl = 0,
             tp = 0,
-                status = 'filled'
+            status = 'filled',
+            profit = profit,
         )
         print("✅ Lệnh đã gửi:", result)
         return {"result": result, "status": "success", "data": (symbolSQL, order_transaction)}
@@ -121,6 +132,7 @@ def mt5_connect(account_name: int):
 def run_order(order, data, username_id, lot_id):
     try:
         message = order_send_mt5(
+            is_odd = False,
             price=order.current_price,
             symbol=order.symbol,
             lot=data.volume,
@@ -148,7 +160,9 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
         take_profit=data.take_profit,
         status=data.status,
         type=data.type,
-        status_sl_tp=data.status_sl_tp
+        status_sl_tp=data.status_sl_tp,
+        IsUSD=data.IsUSD,
+        usd=data.usd
     )
     db.add(lotNew)
     db.flush()
@@ -233,6 +247,9 @@ def get_symbols_db(data, id_user):
         if data['status'] is not None:
             filters.append(LotInformation.status == data['status'])
 
+        if data['statusType'] is not None:
+            filters.append(LotInformation.type == data['statusType'])
+
         if data['acc_transaction'] is not None:
             filters.append(LotInformation.account_transaction_id == int(data['acc_transaction']))
 
@@ -255,6 +272,8 @@ def get_symbols_db(data, id_user):
             .all()
         )
 
+        
+
         # 🔹 Chuyển sang list dict và thêm trường mới
         result_data = []
         for item in dataLots:
@@ -272,6 +291,7 @@ def get_symbols_db(data, id_user):
         }
     except Exception as e:
         db.rollback()
+        print("Lỗi trong hàm get_symbols_db: ", e)
     finally:
         db.close()
 
@@ -326,3 +346,66 @@ def patch_lot_transaction(data: PatchotRequest):
         print(f"❌ Lỗi trong đóng lệnh nhanh: {e}")
     finally:
         db.close()
+
+
+def close_position_transaction_controll(ticket: int, volume: float, loginId: int, acc_transaction: int):
+    try: 
+        db = SessionLocal()
+
+        deviation = 30
+        
+        position = mt5.positions_get(ticket=ticket)
+        if not position:
+            return {"error": f"Không tìm thấy lệnh với ticket {ticket}"}
+
+        pos = position[0]
+
+        # Nếu volume yêu cầu lớn hơn volume hiện tại thì giới hạn lại
+        if volume > pos.volume:
+            volume = pos.volume
+
+        # Xác định loại lệnh đóng (ngược lại)
+        close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+
+        # Lấy giá hiện tại
+        tick = mt5.symbol_info_tick(pos.symbol)
+        if tick is None:
+            return {"error": f"Không lấy được giá cho {pos.symbol}"}
+
+        price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
+
+        # Tạo request đóng lệnh với volume yêu cầu
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": pos.symbol,
+            "volume": volume,   # 🔥 chỉ đóng 1 phần
+            "type": close_type,
+            "position": pos.ticket,
+            "price": price,
+            "deviation": deviation,
+            "magic": pos.magic,
+            "comment": f"Close{volume}_{pos.ticket}"[:30],
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
+        else:
+            isCheck = db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket).first()
+            if(isCheck):
+                if (float(isCheck.volume) <= float(volume)):
+                    db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == ticket).update({"status": "cancelled"})
+                    db.query(OrdersTransaction).filter(OrdersTransaction.id_transaction == ticket).update({"status": "cancelled"})
+                    db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket).delete()
+                else:
+                    db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket).update({"profit": pos.profit,"volume": float(isCheck.volume) - float(volume)})
+
+            db.commit()
+        return {"success": f"Cắt {volume}/{isCheck.volume} của cặp tiền {pos.symbol} thành công"}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+    finally:
+        db.close

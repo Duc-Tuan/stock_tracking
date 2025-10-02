@@ -1,4 +1,3 @@
-import time
 import MetaTrader5 as mt5
 from src.models.model import SessionLocal
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
@@ -7,11 +6,19 @@ from src.models.modelTransaction.position_transaction_model import PositionTrans
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.services.terminals_transaction import terminals_transaction
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+from src.models.modelTransaction.setting_close_odd import SettingCloseOddTransaction
+from src.models.modelTransaction.setting_close_odd_daily_risk import SettingCloseOddDailyRiskTransaction
+from src.models.modelTransaction.deal_transaction_model import DealTransaction
+from src.models.modelTransaction.notification_transansaction import NotificationTransaction
 from src.models.modelMultiAccountPnL import MultiAccountPnL
+from src.models.modelAccMt5 import AccountMt5
 from src.services.socket_manager import emit_sync
 from sqlalchemy import func
 import json
+from datetime import datetime
 import queue as pyqueue
+
+from src.controls.transaction_controls.auto_order import close_order_mt5
 
 # Khởi tạo MT5 1 lần khi app start
 def mt5_connect(account_name: int):
@@ -23,6 +30,75 @@ def mt5_connect(account_name: int):
         raise Exception(f"Không connect được MT5 {account_name}. Lỗi: {mt5.last_error()}")
     return True
 
+def close_positions_by_symbol(db, symbol: str, id_notification: int, account_transaction_id: int, deviation: int = 30):
+    mt5_connect(account_transaction_id)
+    try: 
+        # Lấy tất cả position theo symbol
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions:
+            return {"error": f"Không có lệnh nào với symbol {symbol}"}
+
+        closed = []
+        failed = []
+
+        for pos in positions:
+            # Xác định loại lệnh ngược lại để đóng
+            close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+
+            # Lấy giá hiện tại
+            tick = mt5.symbol_info_tick(pos.symbol)
+            if tick is None:
+                failed.append({"ticket": pos.ticket, "error": "Không lấy được giá"})
+                continue
+
+            price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
+
+            # Tạo request đóng lệnh
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": pos.symbol,
+                "volume": pos.volume,
+                "type": close_type,
+                "position": pos.ticket,
+                "price": price,
+                "deviation": deviation,
+                "magic": pos.magic,
+                "comment": f"Close order {pos.ticket}",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+
+            # Gửi lệnh đóng
+            result = mt5.order_send(request)
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                closed.append(pos.ticket)
+                db.query(PositionTransaction).filter(PositionTransaction.id_transaction == pos.ticket).delete()
+
+                dataDeal = DealTransaction(
+                    ticket = pos.ticket,
+                    username_id = 1,
+                    account_id = account_transaction_id,
+                    symbol = pos.symbol,
+                    position_type = close_type,
+                    volume = pos.volume,
+                    open_price = price,
+                    close_price = price,
+                    open_time = datetime.fromtimestamp(pos.time),
+                    profit = pos.profit,
+                    swap = pos.swap,
+                    comment = pos.comment,
+                    id_notification = id_notification
+                )
+
+                db.add(dataDeal)
+            else:
+                failed.append({"ticket": pos.ticket, "retcode": result.retcode, "comment": result.comment})
+        db.commit()
+        return {"closed": closed, "failed": failed}
+    except Exception as e:
+        db.rollback()
+        print(f"Lỗi ở close_send: {e}")
+
 def run_order(data: SymbolTransaction):
     db = SessionLocal()
     position = mt5.positions_get(ticket=data.id_transaction)
@@ -31,6 +107,9 @@ def run_order(data: SymbolTransaction):
         if position:
             pos = position[0]
             isPosition = db.query(PositionTransaction).filter(PositionTransaction.id_transaction == pos.ticket).order_by(PositionTransaction.time.desc()).first()
+            dataSymbol = db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == pos.ticket).first()
+            db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == pos.ticket).update({"profit": pos.profit})
+
             if (isPosition):
                 db.query(PositionTransaction).filter(PositionTransaction.id_transaction == pos.ticket).update({
                     "current_price": pos.price_current,
@@ -52,7 +131,8 @@ def run_order(data: SymbolTransaction):
                     magic_number=isPosition.magic_number,
                     comment=isPosition.comment,
                     swap=pos.swap,
-                    profit=pos.profit
+                    profit=pos.profit,
+                    is_odd = dataSymbol.is_odd
                 )
             else:
                 dataNew = PositionTransaction(
@@ -69,7 +149,8 @@ def run_order(data: SymbolTransaction):
                     magic_number = 123456,
                     comment = pos.comment,
                     swap = pos.swap,
-                    profit = pos.profit
+                    profit = pos.profit,
+                    is_odd = dataSymbol.is_odd
                 )
                 db.add(dataNew)
                 result = dict(
@@ -86,7 +167,8 @@ def run_order(data: SymbolTransaction):
                     magic_number=dataNew.magic_number,
                     comment=dataNew.comment,
                     swap=dataNew.swap,
-                    profit=dataNew.profit
+                    profit=dataNew.profit,
+                    is_odd=dataNew.is_odd
                 )
             db.commit()
     except Exception as e:
@@ -107,8 +189,19 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                 # không có tín hiệu mới → bỏ qua vòng lặp
                 continue
             try:
-
                 account_info = mt5.account_info()
+
+                isCheckLo = db.query(LotInformation)\
+                    .filter(LotInformation.account_transaction_id == account_info.login, 
+                            LotInformation.IsUSD == True, 
+                            LotInformation.type == "RUNNING",
+                            LotInformation.status == "Lenh_thi_truong")\
+                    .all()
+                
+                for item in isCheckLo:
+                    profit_print = account_info.profit if account_info.login == item.account_transaction_id else None
+                    if (item.usd >= profit_print):
+                        close_order_mt5(item.id)
 
                 dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
 
@@ -124,7 +217,7 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                     name=account_info.login,
                     loginId=1
                 )
-                
+
                 if (len(existing) == 0):
                     db.add(new_data)
                 else:
@@ -146,6 +239,132 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                         if future.result():  # chỉ thêm nếu có dữ liệu
                             results.append(future.result())
 
+                dataPosition = (
+                    db.query(
+                        PositionTransaction.symbol,
+                        PositionTransaction.account_id,
+                        func.sum(PositionTransaction.profit).label("total_profit"),
+                        func.count(PositionTransaction.id).label("count_orders"),
+                        func.sum(PositionTransaction.volume).label("total_volume")
+                    )
+                    .group_by(PositionTransaction.symbol, PositionTransaction.account_id)
+                    .all()
+                )
+
+                dataAcc_transaction = (
+                    db.query(
+                        SettingCloseOddTransaction.risk,
+                        AccountsTransaction.monney_acc,
+                        AccountsTransaction.username,
+                        SettingCloseOddDailyRiskTransaction.risk.label('daily_risk'),
+                    )
+                    .join(
+                        SettingCloseOddTransaction,
+                        AccountsTransaction.id_setting_close_odd == SettingCloseOddTransaction.id,
+                    )
+                    .join(
+                        SettingCloseOddDailyRiskTransaction,
+                        AccountsTransaction.id_setting_close_odd_daily_risk == SettingCloseOddDailyRiskTransaction.id,
+                    )
+                ).all()
+
+                isCheckLoAccTransaction = db.query(LotInformation).filter(LotInformation.account_transaction_id == int(account_info.login), 
+                                                                          LotInformation.status == "Lenh_thi_truong").all()
+                if (isCheckLoAccTransaction):
+                    for item in isCheckLoAccTransaction:
+                        isSymbolLot = db.query(SymbolTransaction).filter(SymbolTransaction.lot_id == item.id, SymbolTransaction.status == "cancelled").all()
+                        isAccMonitor = db.query(AccountMt5).filter(AccountMt5.username == item.account_monitor_id).first()
+                        if (len(isSymbolLot) >= len(json.loads(isAccMonitor.by_symbol))):
+                            db.query(LotInformation).filter(LotInformation.id == item.id).update({"type": "CLOSE"})
+                    db.commit()
+
+                today = datetime.now().date()
+                start = datetime.combine(today, datetime.min.time())   # 00:00:00 hôm nay
+                end   = datetime.combine(today, datetime.max.time())   # 23:59:59 hôm nay
+
+                symbolRisk = []
+                for risk, monney_acc, username, daily_risk in dataAcc_transaction:
+                    total_profit = (
+                        db.query(func.sum(SymbolTransaction.profit))
+                        .filter(
+                            SymbolTransaction.account_transaction_id == username,
+                            SymbolTransaction.time >= start,
+                            SymbolTransaction.time <= end
+                        )
+                        .scalar()  # trả về 1 giá trị thay vì tuple
+                    )
+                    filtered = [row for row in dataPosition if row[1] == username]
+                    if (total_profit <= -(monney_acc * (daily_risk / 100))):
+                        for row in filtered:
+                            dataSendOrder = close_positions_by_symbol(db, symbol= row[0], id_notification= 1, account_transaction_id= username)
+                            if (dataSendOrder['closed']):
+                                dataNotification = NotificationTransaction(
+                                    loginId = 1,
+                                    account_transaction_id = username,
+                                    symbol = row[0],
+                                    total_volume = row[4],
+                                    profit = row[2],
+                                    total_order = row[3],
+                                    risk = risk,
+                                    monney_acctransaction = monney_acc,
+                                    is_send= False,
+                                    isRead= False,
+                                    daily_risk= daily_risk,
+                                    type_notification = "daily"
+                                )
+                                db.add(dataNotification)
+                                db.flush()
+
+                                emit_sync("notification_message", dataNotification.to_dict())
+
+                                for a in dataSendOrder['closed']:
+                                    print(a, row[0], "profit: ", row[2])
+                                    db.query(DealTransaction).filter(DealTransaction.ticket == a).update({"id_notification": dataNotification.id})
+                                    db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == a).update({"status": "cancelled"})
+                                    
+                                db.commit()
+
+                    for row in filtered:
+                        symbolRisk.append({
+                            "acc": username,
+                            "symbol": row[0],
+                            "total_volume": row[4],
+                            "total_profit": row[2],
+                            "total_order": row[3],
+                            "monney_acctransaction": monney_acc,
+                            "risk": risk,
+                            "daily_risk": daily_risk,
+                            "daily_profit": total_profit,
+                        })
+                        if (row[2] <= -(monney_acc * (risk / 100))):
+                            dataSendOrder = close_positions_by_symbol(db, symbol= row[0], id_notification= 1, account_transaction_id= username)
+                            if (dataSendOrder['closed']):
+                                dataNotification = NotificationTransaction(
+                                    loginId = 1,
+                                    account_transaction_id = username,
+                                    symbol = row[0],
+                                    total_volume = row[4],
+                                    profit = row[2],
+                                    total_order = row[3],
+                                    risk = risk,
+                                    monney_acctransaction = monney_acc,
+                                    is_send=False,
+                                    isRead=False,
+                                    daily_risk= daily_risk,
+                                    type_notification = "risk"
+                                )
+                                db.add(dataNotification)
+                                db.flush()
+
+                                emit_sync("notification_message", dataNotification.to_dict())
+
+                                for a in dataSendOrder['closed']:
+                                    print(a, row[0], "profit: ", row[2])
+                                    db.query(DealTransaction).filter(DealTransaction.ticket == a).update({"id_notification": dataNotification.id})
+                                    db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == a).update({"status": "cancelled"})
+                                    
+                                db.commit()
+                                
                 # Lấy dữ liệu trước khi đóng session
                 acc_data = [dict(
                     id=a.id,
@@ -247,7 +466,8 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                             "pnl_break_even": profit / (row.total_volume * 100) if row.total_volume != 0 else 0,
                             "pnl": data_pnl_monitor.total_pnl if data_pnl_monitor else 0
                         })
-                emit_sync("position_message", {"acc": acc_data, "positions": results, "break_even": break_even})
+                
+                emit_sync("position_message", {"acc": acc_data, "positions": results, "break_even": break_even, "symbolRisk": symbolRisk})
             except Exception as e:
                 db.rollback()
                 print(f"[{name}] ❌ Lỗi trong monitor_account: {e}")

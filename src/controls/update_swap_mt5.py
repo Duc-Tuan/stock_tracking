@@ -41,10 +41,10 @@ def get_swap_time_str_vietnam():
 
 def daily_swap_process(terminals):
     def job():
-        for name, path in terminals.items():
-            if not mt5.initialize(path):
-                print(f"⚠️ Không khởi tạo được MT5: {path}")
-                continue
+        for name, cfg in terminals.items():
+            if not mt5.initialize(path=cfg["path"]):
+                print(f"[{name}] ❌ Không khởi tạo được MT5 ở {cfg['path']}")
+                return
 
             account_info = mt5.account_info()
             positions = mt5.positions_get()

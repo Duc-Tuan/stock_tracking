@@ -14,7 +14,6 @@ from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
-from src.models.modelTransaction.deal_transaction_model import DealTransaction
 
 from src.services.terminals_transaction import terminals_transaction
 from src.services.socket_manager import emit_sync
@@ -108,13 +107,13 @@ def update_type_lot(id):
     db = SessionLocal()
     try: 
         db.query(LotInformation).filter(LotInformation.id == id).update({"status": "Lenh_thi_truong"})
-        lot = db.query(LotInformation).filter(LotInformation.id == id).first()
-        emit_sync("order_filled", {"status": "open_order", "data": model_to_dict(lot)})
         db.commit()
     except Exception as e:
         db.rollback()
         print(f"Lỗi ở lệnh ngược update_type_lot: {e}")
     finally:
+        lot = db.query(LotInformation).filter(LotInformation.id == id).first()
+        emit_sync("order_filled", {"status": "open_order", "data": model_to_dict(lot)})
         db.close()
 
 def update_type_lot_type(id):
@@ -179,21 +178,6 @@ def close_send(dataSymbol: SymbolTransaction):
 
             db.query(PositionTransaction).filter(PositionTransaction.id_transaction == ticket_id).delete()
 
-            dataDeal = DealTransaction(
-                username_id = dataSymbol.username_id,
-                account_id = dataSymbol.account_transaction_id,
-                symbol = dataSymbol.symbol,
-                position_type = dataSymbol.type,
-                volume = dataSymbol.volume,
-                open_price = dataSymbol.price_open,
-                close_price = price,
-                open_time = datetime.fromtimestamp(pos.time),
-                profit = pos.profit,
-                swap = pos.swap,
-                comment = pos.comment,
-            )
-            db.add(dataDeal)
-
             db.commit()
         return {"symbol": dataSymbol.symbol, "status": "success", "message": result}
     except Exception as e:
@@ -212,12 +196,14 @@ def run_order_close(dataLot: LotInformation):
         ).order_by(SymbolTransaction.time.desc()).all()
 
         results = []
+
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(close_send, dataSymbol) for dataSymbol in dataSymbols]
             for future in as_completed(futures):
                 results.append(future.result())
-        # ✅ chỉ commit khi tất cả run_order return success
-        if all(r["status"] == "success" for r in results):
+                
+        # ✅ gom hết kết quả, chỉ update LotInformation khi tất cả success
+        if all(r and r.get("status") == "success" for r in results):
             update_type_lot_type(dataLot.id)
         print("✅ vào lệnh trên MT5")
     finally:
@@ -231,12 +217,7 @@ def close_order_mt5(id: int):
             LotInformation.status == "Lenh_thi_truong",
         ).order_by(LotInformation.time.desc()).all()
 
-        results = []
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(run_order_close, dataLot) for dataLot in dataLots]
-            for future in as_completed(futures):
-                results.append(future.result())
-        print("✅ vào lệnh trên MT5")
+        return [run_order_close(dataLot) for dataLot in dataLots]
     finally:
         db.close()
 
@@ -247,13 +228,18 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
         if symbol_info is None:
             raise Exception(f"Không tìm thấy symbol: {symbol}")
 
-
         if not symbol_info.visible:
             mt5.symbol_select(symbol, True)
 
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             raise Exception(f"Không lấy được giá cho symbol: {symbol}")
+        
+        positions = mt5.positions_get(ticket=tick)
+        if positions is None:
+            raise Exception(f"Không tìm thấy tick: {tick}")
+        
+        pos = positions[0]
         
         # Chuyển order_type từ chuỗi sang mã lệnh MT5
         order_type_map = {
@@ -286,8 +272,8 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
             raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
         else:
             ticket_id = result.order
-            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol, "id_transaction": ticket_id})
-            db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id})
+            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol, "id_transaction": ticket_id, "profit": pos.profit})
+            db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id, "profit": pos.profit})
             db.commit()
             print("✅ Lệnh đã gửi:", result)
             return result

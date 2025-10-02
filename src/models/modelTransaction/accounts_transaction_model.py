@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float,ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Enum
 from src.models.model import Base, relationship
 
 class AccountsTransaction(Base):
@@ -16,11 +16,17 @@ class AccountsTransaction(Base):
     server = Column(String)
     loginId = Column(Integer)
 
+    id_setting_close_odd = Column(Integer, default=0) 
+    id_setting_close_odd_daily_risk = Column(Integer, default=0) 
+    type_acc = Column(Enum("QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "COM", "SWWING" ,"VAY"), default='QUY') 
+    monney_acc = Column(Integer, default=0)
+
     orders = relationship("OrdersTransaction", back_populates="account")
     positions = relationship("PositionTransaction", back_populates="account")
     deals = relationship("DealTransaction", back_populates="account")
     lotaccount = relationship("LotInformation", back_populates="account")
     symbol_rel = relationship("SymbolTransaction", back_populates="account")
+    notification = relationship("NotificationTransaction", back_populates="account")
     # monitor_account_mt5 = relationship("AccountMt5", back_populates="account")
 
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
@@ -28,3 +34,4 @@ from src.models.modelTransaction.position_transaction_model import PositionTrans
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelTransaction.notification_transansaction import NotificationTransaction
