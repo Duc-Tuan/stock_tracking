@@ -10,6 +10,9 @@ def get_order_close(data, id_user):
 
         query = db.query(SymbolTransaction)
 
+        start_dt = None
+        end_dt = None
+
         # Danh sách các điều kiện động
         filters = [SymbolTransaction.username_id == id_user, SymbolTransaction.status == "cancelled"]
 
@@ -43,8 +46,9 @@ def get_order_close(data, id_user):
         ).filter(*filters).first()
 
         today = datetime.now().date()
-        start = datetime.combine(today, datetime.min.time())   # 00:00:00 hôm nay
-        end   = datetime.combine(today, datetime.max.time())   # 23:59:59 hôm nay
+        if start_dt is None or end_dt is None:
+            start_dt = datetime.combine(today, datetime.min.time())   # 00:00:00 hôm nay
+            end_dt   = datetime.combine(today, datetime.max.time())   # 23:59:59 hôm nay
 
         results = (
             db.query(
@@ -55,15 +59,13 @@ def get_order_close(data, id_user):
             .filter(
                 SymbolTransaction.username_id == id_user, 
                 SymbolTransaction.status == "cancelled",
-                SymbolTransaction.time >= start,
-                SymbolTransaction.time <= end
+                SymbolTransaction.time >= start_dt,
+                SymbolTransaction.time <= end_dt
             )
             .group_by(SymbolTransaction.account_transaction_id)
             .all()
         )
 
-        today = datetime.now().date()
-        # Chuyển tuple thành dict để FastAPI trả về JSON
         results_dict = [
             {
                 "account_transaction_id": account_id,

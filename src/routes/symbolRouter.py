@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from src.controls.authControll import get_current_user
 from src.models.modelMultiAccountPnL import MultiAccountPnL
+from src.models.modelstatisticalPnl import StatisticalPNL
 from sqlalchemy.orm import Session
 from src.middlewares.authMiddleware import get_db
 from fastapi.responses import ORJSONResponse
@@ -53,5 +54,27 @@ def get_symbols(
             "next_cursor": next_cursor,
             "data": result
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/statistical", response_class=ORJSONResponse)
+def get_statistical(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    login_id: int = 0,
+):
+    if str(current_user.role) != "UserRole.admin":
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+
+    try:
+        data = db.query(StatisticalPNL).filter(StatisticalPNL.login == login_id).all()
+
+        result = []
+        for row in data:
+            r = row.__dict__.copy()
+            r.pop("_sa_instance_state", None)
+            result.append(r)
+        return result
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

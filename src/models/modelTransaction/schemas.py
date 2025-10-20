@@ -94,11 +94,14 @@ class OrderData(BaseModel):
 class OrderBootItem(BaseModel):
     username: int  
     data: OrderData
-    type: str
+    type: Literal["EXNESS", "FUND"]
 
 class CloseOrderBootItem(BaseModel):
     id: int
     serverName: int
+
+class CloseOrderBoot(BaseModel):
+    id: int
 
 class getLots(BaseModel):
     start_time: int
@@ -169,3 +172,6 @@ class CloseOddOrderRequest(BaseModel):
     ticket: int
     vloume: float
     acc_transaction: int
+
+class NoteRequest(BaseModel):
+    html: str

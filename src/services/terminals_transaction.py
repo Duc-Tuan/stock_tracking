@@ -10,7 +10,7 @@ terminals_transaction = {
         "login": 205908671,
         "password": "2Anhem34@",
         "server": "Exness-MT5Trial7",
-    },
+    }
 }
 
 terminals_transaction_boot = {
@@ -27,4 +27,3 @@ terminals_transaction_boot = {
         "server": "Exness-MT5Trial7",
     },
 }
-

@@ -32,14 +32,29 @@ def replace_suffix_with_m(sym: str) -> str:
     else:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm") + "m"
+    
+def replace_suffix_with(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0)
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm")
+
+def isCheckServerAccTransac(usname: int) -> str:
+    return terminals_transaction[str(usname)]["server"]
 
 def order_send_mt5(is_odd: bool | None, price: float | None, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
     symbol_replace = replace_suffix_with_m(symbol)
 
+    if "Exness" in isCheckServerAccTransac(account_transaction_id):
+        symbol_replace = replace_suffix_with(symbol)
+
     symbol_info = mt5.symbol_info(symbol_replace)
     if symbol_info is None:
         raise Exception(f"Không tìm thấy symbol: {symbol_replace}")
-
+    
     if not symbol_info.visible:
         mt5.symbol_select(symbol_replace, True)
 
@@ -77,8 +92,10 @@ def order_send_mt5(is_odd: bool | None, price: float | None, symbol: str, lot: f
         "magic": 123456,
         "comment": f"python-{symbol}",
         "type_time": ORDER_TIME_GTC,
-        "type_filling": ORDER_FILLING_IOC,
     }
+
+    if "Exness" in isCheckServerAccTransac(account_transaction_id):
+        request["type_filling"] = ORDER_FILLING_IOC
 
     result = mt5.order_send(request)
     if result.retcode != mt5.TRADE_RETCODE_DONE:

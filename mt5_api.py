@@ -3,7 +3,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from urllib.parse import parse_qs
-from fastapi.encoders import jsonable_encoder
 from collections import defaultdict
 
 from src.models.model import Base, engine
@@ -20,6 +19,7 @@ from src.routes.transaction.position_transaction import router as position_trans
 from src.routes.transaction.setting_risk import router as setting_risk_transaction_router
 from src.routes.transaction.notification import router as notification_router
 from src.routes.transaction.odd_order import router as odd_order_router
+from src.routes.noteRouter import router as note_router
 
 from src.services.socket_manager import sio
 from src.controls.authControll import get_current_user
@@ -61,6 +61,7 @@ app.include_router(position_transaction_router)
 app.include_router(setting_risk_transaction_router)
 app.include_router(notification_router)
 app.include_router(odd_order_router)
+app.include_router(note_router)
 
 symbol_clients = defaultdict(set)
 

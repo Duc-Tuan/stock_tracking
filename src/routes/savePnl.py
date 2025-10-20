@@ -2,15 +2,25 @@ import time
 import json
 import traceback
 import MetaTrader5 as mt5
-from datetime import datetime
+from datetime import datetime, date
 import queue as pyqueue
 from sqlalchemy.orm import Session
 
 from src.models.modelMultiAccountPnL import MultiAccountPnL
+from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
 from src.utils.stop import swap_difference
 from src.services.socket_manager import emit_chat_message_sync
+
+def sqlalchemy_to_dict(row):
+    d = row.__dict__.copy()
+    d.pop("_sa_instance_state", None)
+    for k, v in d.items():
+        if isinstance(v, (datetime, date)):
+            d[k] = v.isoformat()  # date cũng có isoformat() -> 'YYYY-MM-DD'
+    return d
+
 
 def monitor_account(name, cfg, queue, stop_event, pub_queue):
     if not mt5.initialize(path=cfg["path"]):
@@ -58,6 +68,8 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     by_symbol_json = json.dumps(by_symbol)
                     by_symbol_json_acc_monitor = json.dumps(symbols_acc_monitor)
 
+                    update_statistics(session, account_info.login, total_pnl)
+
                     existing = session.query(AccountMt5).filter(AccountMt5.username == account_info.login).all()
                     if (len(existing) == 0):
                         new_data = AccountMt5(
@@ -80,11 +92,20 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     session.add(record)
                     session.commit()
 
+                    statistical_login = (
+                        session.query(StatisticalPNL)
+                        .filter(StatisticalPNL.login == account_info.login)
+                        .all()
+                    )
+
+                    result_statistical = [sqlalchemy_to_dict(row) for row in statistical_login]
+
                     data_send = {
                         "login": account_info.login,
                         "total_pnl": total_pnl,
                         "by_symbol": by_symbol_json,
                         "time": datetime.now().isoformat(),
+                        "statistical": result_statistical
                     }
 
                     pub_queue.put({   # 👈 gửi vào pub_queue để dispatcher phân phát
@@ -109,3 +130,74 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
     finally:
         session.close()
         mt5.shutdown()
+
+def update_statistics(session, login: int, total_pnl: float):
+    today = datetime.now().date()
+    week_str = datetime.now().strftime("%Y-%W")
+    month_str = datetime.now().strftime("%Y-%m")
+
+    stat = session.query(StatisticalPNL).filter_by(login=login).first()
+    if not stat:
+        stat = StatisticalPNL(login=login)
+        session.add(stat)
+
+    # --- Ngày ---
+    if stat.best_day != today:
+        stat.day_min = total_pnl
+        stat.day_max = total_pnl
+        stat.best_day = today
+        stat.best_day_change = 0
+        stat.worst_day = today
+        stat.worst_day_change = 0
+    else:
+        stat.day_min = min(stat.day_min, total_pnl)
+        stat.day_max = max(stat.day_max, total_pnl)
+        change = stat.day_max - stat.day_min
+        if change > (stat.best_day_change or 0):
+            stat.best_day_change = change
+            stat.best_day = today
+        if change < (stat.worst_day_change or 0):
+            stat.worst_day_change = change
+            stat.worst_day = today
+
+    # --- Tuần ---
+    if stat.best_week != week_str:
+        stat.week_min = total_pnl
+        stat.week_max = total_pnl
+        stat.best_week = week_str
+        stat.best_week_change = 0
+        stat.worst_week = week_str
+        stat.worst_week_change = 0
+    else:
+        stat.week_min = min(stat.week_min, total_pnl)
+        stat.week_max = max(stat.week_max, total_pnl)
+        change = stat.week_max - stat.week_min
+        if change > (stat.best_week_change or 0):
+            stat.best_week_change = change
+            stat.best_week = week_str
+        if change < (stat.worst_week_change or 0):
+            stat.worst_week_change = change
+            stat.worst_week = week_str
+
+    # --- Tháng ---
+    if stat.best_month != month_str:
+        stat.month_min = total_pnl
+        stat.month_max = total_pnl
+        stat.best_month = month_str
+        stat.best_month_change = 0
+        stat.worst_month = month_str
+        stat.worst_month_change = 0
+    else:
+        stat.month_min = min(stat.month_min, total_pnl)
+        stat.month_max = max(stat.month_max, total_pnl)
+        change = stat.month_max - stat.month_min
+        if change > (stat.best_month_change or 0):
+            stat.best_month_change = change
+            stat.best_month = month_str
+        if change < (stat.worst_month_change or 0):
+            stat.worst_month_change = change
+            stat.worst_month = month_str
+
+    stat.time = datetime.now()
+    session.merge(stat)
+    session.commit()

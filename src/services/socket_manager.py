@@ -19,18 +19,12 @@ def emit_sync(event: str, data):
             # Nếu có loop nhưng chưa chạy → chạy đồng bộ
             loop.run_until_complete(sio.emit(event, data))
     except RuntimeError:
-        # Trường hợp gọi từ thread khác hoặc loop đã đóng
-        # try:
-        #     from mt5_api import sio, main_loop 
-        #     # Lấy loop chính toàn cục (nếu bạn có lưu lại khi start app)
-        #     asyncio.run_coroutine_threadsafe(sio.emit(event, data), main_loop)
-        # except Exception:
-        # fallback: tạo loop tạm và chạy
         asyncio.run(sio.emit(event, data))
 
 def emit_chat_message_sync(listen: str, data):
     symbol_id = data['login']
     room = f"chat_message_{symbol_id}"
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():

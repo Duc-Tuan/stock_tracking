@@ -32,7 +32,7 @@ class UpdateRiskAccTransaction(BaseModel):
     id_daily_risk: int = None
     id_acc: int
     monney_acc: int = None
-    type_acc: Literal["QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "COM", "SWWING" ,"VAY"] = None
+    type_acc: Literal["QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "COM", "SWWING" ,"VAY", "DEMO"] = None
 
 def object_as_dict(obj):
     return {

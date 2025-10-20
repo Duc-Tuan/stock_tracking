@@ -1,5 +1,6 @@
 from src.models.modelAccMt5 import AccountMt5
 from src.models.modelMultiAccountPnL import MultiAccountPnL
+from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.modelsUser import UserModel
 from src.models.modelsUserToken import UserToken
 from src.models.modelSwapMt5 import SwapMt5
@@ -15,13 +16,12 @@ from src.models.modelTransaction.symbol_transaction_model import SymbolTransacti
 from src.models.modelTransaction.notification_transansaction import NotificationTransaction
 from src.models.modelTransaction.setting_close_odd_daily_risk import SettingCloseOddDailyRiskTransaction
 
-from src.models.modelBoot.accounts_transaction_model import AccountsBoot
 from src.models.modelBoot.position_transaction_model import PositionBoot
-
 
 __all__ = [
     "AccountMt5",
     "MultiAccountPnL",
+    "StatisticalPNL",
     "UserModel",
     "UserToken",
     "SwapMt5",
@@ -32,7 +32,6 @@ __all__ = [
     "OrdersTransaction",
     "PriceTickTransaction",
     "PositionTransaction",
-    "AccountsBoot",
     "PositionBoot",
     "NotificationTransaction",
     "SettingCloseOddDailyRiskTransaction"

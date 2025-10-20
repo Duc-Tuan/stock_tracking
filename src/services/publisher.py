@@ -224,17 +224,19 @@ def tick_publisher_boot(name, cfg, pub_queue, stop_event, monitor_queue, close_s
                     current_positions[key] = {
                         "symbol": pos.symbol,
                         "volume": pos.volume,
-                        "type": pos.type
+                        "type": pos.type,
+                        "ticket": pos.ticket
                     }
            
             # detect closed
             closed_positions = set(open_positions.keys()) - set(current_positions.keys())
-            for symbol, pos_type in closed_positions:
+            for symbol, pos_type  in closed_positions:
                 print(f"[{name}] detect closed {symbol} type={pos_type}")
                 close_sync_queue.put({
                     "action": "close",
                     "account": name,
                     "symbol": symbol,
+                    "ticket": open_positions[(symbol, pos_type)]["ticket"],
                     "type": pos_type,
                 })
 

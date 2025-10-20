@@ -129,6 +129,9 @@ def update_type_lot_type(id):
         emit_sync("order_filled", {"status": "close_order", "data": model_to_dict(lot)})
         db.close()
 
+def isCheckServerAccTransac(usname: int) -> str:
+    return terminals_transaction[str(usname)]["server"]
+
 def close_send(dataSymbol: SymbolTransaction):
     try: 
         db = SessionLocal()
@@ -165,8 +168,11 @@ def close_send(dataSymbol: SymbolTransaction):
             "magic": pos.magic,
             "comment": f"Close order {pos.ticket}",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            # "type_filling": mt5.ORDER_FILLING_IOC,
         }
+
+        if "Exness" in isCheckServerAccTransac(dataSymbol.account_transaction_id):
+            request["type_filling"] = mt5.ORDER_FILLING_IOC
 
         # Gửi lệnh đóng
         result = mt5.order_send(request)
@@ -224,16 +230,22 @@ def close_order_mt5(id: int):
 def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_symbol: int, acc_transaction: int):
     db = SessionLocal()
     try: 
-        symbol_info = mt5.symbol_info(symbol)
+        symbol_replace = symbol
+
+        # CHU Y CHO NAY
+        if "Exness" in isCheckServerAccTransac(acc_transaction):
+            symbol_replace = replace_suffix_with___(symbol)
+
+        symbol_info = mt5.symbol_info(symbol_replace)
         if symbol_info is None:
-            raise Exception(f"Không tìm thấy symbol: {symbol}")
+            raise Exception(f"Không tìm thấy symbol: {symbol_replace}")
 
         if not symbol_info.visible:
-            mt5.symbol_select(symbol, True)
+            mt5.symbol_select(symbol_replace, True)
 
-        tick = mt5.symbol_info_tick(symbol)
+        tick = mt5.symbol_info_tick(symbol_replace)
         if tick is None:
-            raise Exception(f"Không lấy được giá cho symbol: {symbol}")
+            raise Exception(f"Không lấy được giá cho symbol: {symbol_replace}")
         
         positions = mt5.positions_get(ticket=tick)
         if positions is None:
@@ -256,23 +268,26 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
 
         request = {
             "action": action_type,
-            "symbol": symbol,
+            "symbol": symbol_replace,
             "volume": lot,
             "type": mt5_order_type,
             "price": price,
             "slippage": 0,
             "magic": 123456,
-            "comment": f"python-{symbol}",
+            "comment": f"python-{symbol_replace}",
             "type_time": ORDER_TIME_GTC,
-            "type_filling": ORDER_FILLING_IOC,
+            # "type_filling": ORDER_FILLING_IOC,
         }
+
+        if "Exness" in isCheckServerAccTransac(acc_transaction):
+            request["type_filling"] = ORDER_FILLING_IOC
 
         result = mt5.order_send(request)
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
         else:
             ticket_id = result.order
-            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol, "id_transaction": ticket_id, "profit": pos.profit})
+            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol_replace, "id_transaction": ticket_id, "profit": pos.profit})
             db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id, "profit": pos.profit})
             db.commit()
             print("✅ Lệnh đã gửi:", result)
@@ -315,6 +330,15 @@ def replace_suffix_with(sym: str) -> str:
     else:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm")  + "m"
+
+def replace_suffix_with___(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0)
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm")
 
 def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
     mt5_connect(acc_transaction)
