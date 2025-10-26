@@ -10,7 +10,7 @@ from src.models.modelTransaction.setting_close_odd import SettingCloseOddTransac
 from src.models.modelTransaction.setting_close_odd_daily_risk import SettingCloseOddDailyRiskTransaction
 from src.models.modelTransaction.deal_transaction_model import DealTransaction
 from src.models.modelTransaction.notification_transansaction import NotificationTransaction
-from src.models.modelMultiAccountPnL import MultiAccountPnL
+from src.models.modelPNL import MultiAccountPnL_M1
 from src.models.modelAccMt5 import AccountMt5
 from src.services.socket_manager import emit_sync
 from sqlalchemy import func
@@ -455,7 +455,7 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                     
                     for row in result_total_volume:
                         profit = profit_map.get((row.account_monitor, row.account_transaction, row.account_start), 0)
-                        data_pnl_monitor = db.query(MultiAccountPnL).filter(MultiAccountPnL.login == row.account_monitor).order_by(MultiAccountPnL.id.desc()).first()
+                        data_pnl_monitor = db.query(MultiAccountPnL_M1).filter(MultiAccountPnL_M1.login == row.account_monitor).order_by(MultiAccountPnL_M1.id.desc()).first()
                         break_even.append({
                             "account_monitor": row.account_monitor,
                             "account_transaction": row.account_transaction,
@@ -464,7 +464,7 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                             "total_order": row.record_count,
                             "total_profit": profit,
                             "pnl_break_even": profit / (row.total_volume * 100) if row.total_volume != 0 else 0,
-                            "pnl": data_pnl_monitor.total_pnl if data_pnl_monitor else 0
+                            "pnl": data_pnl_monitor.close if data_pnl_monitor else 0
                         })
                 
                 emit_sync("position_message", {"acc": acc_data, "positions": results, "break_even": break_even, "symbolRisk": symbolRisk})

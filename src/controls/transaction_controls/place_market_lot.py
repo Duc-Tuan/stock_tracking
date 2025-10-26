@@ -48,8 +48,8 @@ def isCheckServerAccTransac(usname: int) -> str:
 def order_send_mt5(is_odd: bool | None, price: float | None, symbol: str, lot: float, order_type: str, usename_id: float, lot_id: float, account_transaction_id: float):
     symbol_replace = replace_suffix_with_m(symbol)
 
-    if "Exness" in isCheckServerAccTransac(account_transaction_id):
-        symbol_replace = replace_suffix_with(symbol)
+    # if "Exness" in isCheckServerAccTransac(account_transaction_id):
+    #     symbol_replace = replace_suffix_with(symbol)
 
     symbol_info = mt5.symbol_info(symbol_replace)
     if symbol_info is None:

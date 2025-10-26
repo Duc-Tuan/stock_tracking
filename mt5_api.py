@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from urllib.parse import parse_qs
@@ -8,7 +8,6 @@ from collections import defaultdict
 from src.models.model import Base, engine
 from src.routes.authRouter import router as auth_router
 from src.routes.accMt5Router import router as auth_mt5_router
-from src.routes.downloadFileRouter import router as download_router
 from src.routes.symbolRouter import router as symbol_router
 from src.routes.transaction.trading import router as trading_router
 from src.routes.transaction.lotTransaction import router as lot_router
@@ -34,7 +33,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 # lưu loop chính toàn cục
-main_loop = asyncio.get_event_loop()
+# main_loop = asyncio.get_event_loop()
 
 # Cho phép CORS
 app.add_middleware(
@@ -48,7 +47,6 @@ app.add_middleware(
 # Đăng ký route HTTP
 app.include_router(auth_router)
 app.include_router(auth_mt5_router)
-app.include_router(download_router)
 app.include_router(symbol_router)
 
 app.include_router(lot_router)

@@ -6,12 +6,12 @@ from datetime import datetime, date
 import queue as pyqueue
 from sqlalchemy.orm import Session
 
-from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
 from src.utils.stop import swap_difference
 from src.services.socket_manager import emit_chat_message_sync
+from src.services.save_pnl_aggregator import save_pnl_to_timeframes
 
 def sqlalchemy_to_dict(row):
     d = row.__dict__.copy()
@@ -68,8 +68,6 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     by_symbol_json = json.dumps(by_symbol)
                     by_symbol_json_acc_monitor = json.dumps(symbols_acc_monitor)
 
-                    update_statistics(session, account_info.login, total_pnl)
-
                     existing = session.query(AccountMt5).filter(AccountMt5.username == account_info.login).all()
                     if (len(existing) == 0):
                         new_data = AccountMt5(
@@ -81,15 +79,14 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                         )
                         session.add(new_data)
 
-                    # === Lưu vào DB ===
-                    record = MultiAccountPnL(
+                    save_pnl_to_timeframes(
+                        session=session,
                         login=account_info.login,
-                        time=datetime.now(),
-                        total_pnl=total_pnl,
-                        num_positions=num_positions,
-                        by_symbol=by_symbol_json,
+                        total_pnl=total_pnl
                     )
-                    session.add(record)
+
+                    update_statistics(session, account_info.login, total_pnl)
+                    
                     session.commit()
 
                     statistical_login = (
@@ -118,7 +115,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                 print(f"❌ Lỗi trong monitor_account: {e}")
                 traceback.print_exc()
                 continue
-
+            
             # ✅ luôn gửi socket, kể cả khi auto_send_order_acc_transaction bị lỗi
             try:
                 emit_chat_message_sync("chat_message", data_send)
@@ -200,4 +197,4 @@ def update_statistics(session, login: int, total_pnl: float):
 
     stat.time = datetime.now()
     session.merge(stat)
-    session.commit()
+    # session.commit()

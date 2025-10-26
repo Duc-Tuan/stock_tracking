@@ -175,3 +175,12 @@ class CloseOddOrderRequest(BaseModel):
 
 class NoteRequest(BaseModel):
     html: str
+
+
+class AskRequest(BaseModel):
+    message: str
+
+class AddDocRequest(BaseModel):
+    doc_id: str
+    text: str
+    metadata: dict | None = None

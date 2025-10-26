@@ -1,5 +1,4 @@
 from src.models.modelAccMt5 import AccountMt5
-from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.modelsUser import UserModel
 from src.models.modelsUserToken import UserToken
@@ -18,9 +17,25 @@ from src.models.modelTransaction.setting_close_odd_daily_risk import SettingClos
 
 from src.models.modelBoot.position_transaction_model import PositionBoot
 
+from src.models.modelPNL import (
+    MultiAccountPnL_M1,
+    MultiAccountPnL_M5,
+    MultiAccountPnL_M10,
+    MultiAccountPnL_M15,
+    MultiAccountPnL_M30,
+    MultiAccountPnL_H1,
+    MultiAccountPnL_H2,
+    MultiAccountPnL_H4,
+    MultiAccountPnL_H6,
+    MultiAccountPnL_H8,
+    MultiAccountPnL_H12,
+    MultiAccountPnL_D,
+    MultiAccountPnL_W,
+    MultiAccountPnL_MN
+)
+
 __all__ = [
     "AccountMt5",
-    "MultiAccountPnL",
     "StatisticalPNL",
     "UserModel",
     "UserToken",
@@ -34,5 +49,19 @@ __all__ = [
     "PositionTransaction",
     "PositionBoot",
     "NotificationTransaction",
-    "SettingCloseOddDailyRiskTransaction"
+    "SettingCloseOddDailyRiskTransaction",
+    "MultiAccountPnL_M1",
+    "MultiAccountPnL_M5",
+    "MultiAccountPnL_M10",
+    "MultiAccountPnL_M15",
+    "MultiAccountPnL_M30",
+    "MultiAccountPnL_H1",
+    "MultiAccountPnL_H2",
+    "MultiAccountPnL_H4",
+    "MultiAccountPnL_H6",
+    "MultiAccountPnL_H8",
+    "MultiAccountPnL_H12",
+    "MultiAccountPnL_D",
+    "MultiAccountPnL_W",
+    "MultiAccountPnL_MN"
 ]

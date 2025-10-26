@@ -9,14 +9,13 @@ from requests import session
 import queue as pyqueue
 
 from src.models.model import SessionLocal
-from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 
 from src.services.terminals_transaction import terminals_transaction
-from src.services.socket_manager import emit_sync
+from src.services.socket_manager import emit_sync, emit_data_compare_socket
 
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
@@ -84,14 +83,6 @@ def transaction_account_order(name, interval, stop_event):
         print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")
     finally:
         mt5.shutdown()
-
-def pnl_monitor(id):
-    db = SessionLocal()
-    db.expire_all()   # xoá cache
-    db.rollback()     # đảm bảo session sync DB
-    data = db.query(MultiAccountPnL).filter(MultiAccountPnL.login == id).order_by(MultiAccountPnL.time.desc()).first()
-    db.close()
-    return  data
 
 def model_to_dict(obj):
     result = {}
@@ -409,3 +400,31 @@ def mac_dinh(item: LotInformation, data):
                         print(f"Lỗi ở đóng lệnh ở trạng thái lô ngược: {e}")
         else:
             print("Lệnh trên thị trường đã được đóng. Không thể thực hiện chức năng đóng tiếp!")
+
+def send_socket_compare(pnl_queues_map, stop_event):
+    while not stop_event.is_set():
+        combined_data = []  # nơi gom toàn bộ PnL
+        # duyệt qua tất cả account
+        for name, pnl_q in pnl_queues_map.items():
+            try:
+                # lấy 1 item trong queue (nếu có)
+                item_pnl_q = pnl_q.get(timeout=0.5)
+                data = item_pnl_q.get("data", {})
+                combined_data.append({
+                    "login": name,
+                    "total_pnl": data.get("total_pnl"),
+                    "time": datetime.now().isoformat()
+                })
+            except pyqueue.Empty:
+                # nếu queue trống -> bỏ qua
+                continue
+            except Exception as e:
+                print(f"❌ Lỗi trong send_socket_compare ({name}): {e}")
+                continue
+
+        try:
+            if combined_data:
+                emit_data_compare_socket("data_compare_socket", combined_data)
+        except Exception as e:
+            print(f"❌ Lỗi emit_data_compare_socket: {e}")
+        

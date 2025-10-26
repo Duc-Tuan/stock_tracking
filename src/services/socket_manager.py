@@ -34,6 +34,16 @@ def emit_chat_message_sync(listen: str, data):
     except RuntimeError:
         asyncio.run(sio.emit(listen, data, room=room))
 
+def emit_data_compare_socket(listen: str, data):
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(sio.emit(listen, data))
+        else:
+            loop.run_until_complete(sio.emit(listen, data))
+    except RuntimeError:
+        asyncio.run(sio.emit(listen, data))
+
 def emit_boot_opposition_sync(listen: str, data):
     symbol_name = replace_suffix_with(data['symbol'])
     room = f"boot_opposition_{symbol_name}"

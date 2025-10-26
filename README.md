@@ -10,5 +10,5 @@
 # python src/services/monitor_transaction.py
 # python src/services/boot_opposition.py
 
-# uvicorn asgi:app --host 0.0.0.0 --port 8000 
+# uvicorn asgi:app --host 0.0.0.0 --port 8000  --reload
 <!-- --workers 6 -->
