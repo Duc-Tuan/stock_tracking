@@ -18,7 +18,7 @@ class AccountsTransaction(Base):
 
     id_setting_close_odd = Column(Integer, default=0) 
     id_setting_close_odd_daily_risk = Column(Integer, default=0) 
-    type_acc = Column(Enum("QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "COM", "SWWING" ,"VAY", "DEMO"), default='QUY') 
+    type_acc = Column(Enum("QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL",  "COM", "SWWING" ,"VAY", "DEMO", "RECIPROCAL_ACC"), default='QUY') 
     monney_acc = Column(Integer, default=0)
 
     orders = relationship("OrdersTransaction", back_populates="account")

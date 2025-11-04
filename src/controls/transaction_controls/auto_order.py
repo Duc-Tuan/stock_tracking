@@ -58,32 +58,6 @@ def auto_send_order_acc_transaction(pnl_q, stop_event):
         finally:
             db.close()
 
-def transaction_account_order(name, interval, stop_event):
-    try: 
-        while not stop_event.is_set():
-            db = SessionLocal()
-            try:
-                dataLot = db.query(LotInformation).filter(LotInformation.account_transaction_id == int(name), LotInformation.type == "RUNNING").order_by(LotInformation.time.desc()).all()
-                for item in dataLot:
-                    switch_case = {
-                        "Nguoc_Limit": partial(nguoc_limit_xuoi_stop, item),
-                        "Xuoi_Stop": partial(nguoc_limit_xuoi_stop, item),
-                        "Xuoi_Limit": partial(xuoi__limit_nguoc_stop, item),
-                        "Nguoc_Stop": partial(xuoi__limit_nguoc_stop, item),
-                    }
-                    switch_case.get(item.status, partial(mac_dinh, item))()
-                # print(f"✅ Theo dõi lot", status)
-            except Exception as e:
-                db.rollback()
-                print(f"❌ Lỗi trong monitor_account: {e}")
-            finally:
-                db.close()
-                time.sleep(interval)
-    except KeyboardInterrupt:
-        print("🔝 Logger process interrupted with Ctrl+C. Exiting gracefully.")
-    finally:
-        mt5.shutdown()
-
 def model_to_dict(obj):
     result = {}
     for c in obj.__table__.columns:

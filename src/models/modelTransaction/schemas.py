@@ -176,7 +176,6 @@ class CloseOddOrderRequest(BaseModel):
 class NoteRequest(BaseModel):
     html: str
 
-
 class AskRequest(BaseModel):
     message: str
 
@@ -184,3 +183,18 @@ class AddDocRequest(BaseModel):
     doc_id: str
     text: str
     metadata: dict | None = None
+    
+class dataSendOrderBootMonitorRequest(BaseModel):
+    symbol: str
+    current_price: float
+    profit: float
+    type: Literal["SELL", "BUY"]
+
+class SendOrderBootMonitorRequest(BaseModel):
+    username: int
+    type_acc: Literal["XUOI", "NGUOC"]
+    tp : float
+    volume: float
+    acc_monitor: int
+    type: Literal["EXNESS", "FUND"]
+    data: List[dataSendOrderBootMonitorRequest]

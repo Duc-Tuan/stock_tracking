@@ -2,13 +2,12 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Tex
 from src.models.model import Base, relationship
 from datetime import datetime
 
-class PositionBoot(Base):
-    __tablename__ = "position_boot" # Ghi nhận các vị thế (position) đang mở
+class PositionMonitorBoot(Base):
+    __tablename__ = "position_monitor_boot" # Ghi nhận các vị thế (position) đang mở
 
     id = Column(Integer, primary_key=True)
     id_transaction = Column(Integer, nullable=False)
     username = Column(String, nullable=False)
-    lot_id = Column(Integer, ForeignKey("info_boot_monitor_boot.id"), nullable=False)
     symbol = Column(String, nullable=False)
     position_type = Column(String, nullable=False)  # 'buy', 'sell'
     volume = Column(Float, nullable=False)

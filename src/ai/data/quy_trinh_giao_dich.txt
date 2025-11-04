@@ -1,0 +1,45 @@
+# QUY TRÌNH GIAO DỊCH NGOẠI HỐI TỰ ĐỘNG
+
+## 1. Mục tiêu
+Hệ thống giao dịch tự động (EA) được thiết kế để theo dõi thị trường và thực hiện lệnh mua/bán dựa trên tín hiệu kỹ thuật.  
+Mục tiêu là tối ưu hóa lợi nhuận, giảm rủi ro và loại bỏ yếu tố cảm xúc trong giao dịch.
+
+## 2. Quy trình chung
+1. Khởi động EA trên nền tảng MT5.  
+2. EA tự động lấy dữ liệu giá real-time từ sàn (Bid, Ask, Time).  
+3. Tính toán các chỉ báo kỹ thuật: EMA, RSI, MACD, Bollinger Bands,...  
+4. Xác định tín hiệu giao dịch:
+   - Mua khi EMA nhanh cắt EMA chậm từ dưới lên.
+   - Bán khi EMA nhanh cắt EMA chậm từ trên xuống.
+5. Đặt lệnh:
+   - Mỗi lệnh có Stop Loss, Take Profit và khối lượng xác định theo quản lý vốn.
+6. Theo dõi lệnh đang mở, cập nhật PnL chưa chốt (floating profit/loss).
+7. Ghi log giao dịch vào cơ sở dữ liệu hoặc file CSV.
+8. Gửi báo cáo qua email định kỳ.
+
+## 3. Quản lý rủi ro
+- Rủi ro mỗi lệnh: không vượt quá 2% tổng tài khoản.
+- Sử dụng trailing stop để bảo vệ lợi nhuận.
+- Dừng EA khi drawdown > 10%.
+
+## 4. Cập nhật dữ liệu
+EA ghi dữ liệu tick và vị thế vào cơ sở dữ liệu SQLite để phục vụ phân tích.  
+Các tiến trình chạy song song:
+- `pnl_monitor`: cập nhật tổng PnL real-time.
+- `swap_updater`: cập nhật swap phí qua đêm.
+- `email_scheduler`: gửi báo cáo tổng hợp mỗi ngày.
+
+## 5. Giao diện Dashboard
+Dashboard web hiển thị:
+- Biểu đồ nến real-time (candlestick).
+- Tổng PnL chưa chốt.
+- Lịch sử giao dịch.
+- Các cảnh báo khi drawdown cao.
+
+## 6. Ghi chú
+- Thời gian giao dịch chính: 07:00 - 22:00 (giờ Việt Nam).
+- Các cặp chính: EURUSD, GBPUSD, USDJPY, XAUUSD, USDCAD.
+- Mỗi cặp có chiến lược riêng biệt, nhưng cùng framework EMA.
+
+## 7. Bảo trì và huấn luyện AI
+Khi có thay đổi về quy trình hoặc chiến lược, cần cập nhật file `quy_trinh_giao_dich.txt` và chạy lại `retriever.py` để AI học dữ liệu mới.

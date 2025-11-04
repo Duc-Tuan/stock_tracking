@@ -18,6 +18,7 @@ from src.routes.transaction.position_transaction import router as position_trans
 from src.routes.transaction.setting_risk import router as setting_risk_transaction_router
 from src.routes.transaction.notification import router as notification_router
 from src.routes.transaction.odd_order import router as odd_order_router
+from src.routes.monitorBoot.sendOrderBoot import router as boot_monitor_router
 from src.routes.noteRouter import router as note_router
 
 from src.services.socket_manager import sio
@@ -55,6 +56,8 @@ app.include_router(close_lot_router)
 app.include_router(order_close_router)
 app.include_router(send_symbol_router)
 app.include_router(position_transaction_router)
+
+app.include_router(boot_monitor_router)
 
 app.include_router(setting_risk_transaction_router)
 app.include_router(notification_router)

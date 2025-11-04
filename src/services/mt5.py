@@ -8,23 +8,15 @@ from multiprocessing import Process, Queue, freeze_support, Event, Manager
 from src.routes.savePnl import monitor_account
 from src.services.publisher import monitor, tick_publisher, dispatcher
 from src.controls.transaction_controls.auto_order import auto_send_order_acc_transaction, send_socket_compare
+from src.controls.transaction_controls.auto_monitor_boot import auto_close_tp_monitor_boot
 from src.controls.update_swap_mt5 import daily_swap_process
 
-# terminals = {
-#     "263006287": {
-#         "path": "C:/Program Files/MetaTrader 5 - acc 1/terminal64.exe",
-#     },
-#     "183459647": {
-#         "path": "C:/Program Files/MetaTrader 5 - acc 2/terminal64.exe",
-#     }
-# }
-
 terminals = {
-    "273912967": {
-        "path": "C:/Program Files/MetaTrader 5/terminal64.exe",
+    "263006287": {
+        "path": "C:/Program Files/MetaTrader 5 - acc 1/terminal64.exe",
     },
-    "205908671": {
-        "path": "C:/Program Files/MetaTrader 5 - acc 3/terminal64.exe",
+    "183459647": {
+        "path": "C:/Program Files/MetaTrader 5 - acc 2/terminal64.exe",
     }
 }
 
@@ -78,6 +70,10 @@ def start_mt5_monitor():
         p1 = Process(target=auto_send_order_acc_transaction, args=(pnl_q, stop_event))
         p1.start()
         processes.append(p1)
+
+        p2 = Process(target=auto_close_tp_monitor_boot, args=(pnl_q, stop_event))
+        p2.start()
+        processes.append(p2)
 
     # ❗ Chỉ tạo 1 tiến trình tổng để so sánh socket
     p2 = Process(target=send_socket_compare, args=(pnl_queues_map, stop_event))

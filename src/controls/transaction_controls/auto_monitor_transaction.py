@@ -1,6 +1,7 @@
 import MetaTrader5 as mt5
 from src.models.model import SessionLocal
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
+from src.models.modelBootAccMonitor.symbol_boot_monitor_model import SymbolMonitorBoot
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -132,7 +133,7 @@ def run_order(data: SymbolTransaction):
                     comment=isPosition.comment,
                     swap=pos.swap,
                     profit=pos.profit,
-                    is_odd = dataSymbol.is_odd
+                    is_odd = getattr(dataSymbol, "is_odd", False) if dataSymbol else False
                 )
             else:
                 dataNew = PositionTransaction(
@@ -150,7 +151,7 @@ def run_order(data: SymbolTransaction):
                     comment = pos.comment,
                     swap = pos.swap,
                     profit = pos.profit,
-                    is_odd = dataSymbol.is_odd
+                    is_odd = getattr(dataSymbol, "is_odd", False) if dataSymbol else False
                 )
                 db.add(dataNew)
                 result = dict(
@@ -168,7 +169,7 @@ def run_order(data: SymbolTransaction):
                     comment=dataNew.comment,
                     swap=dataNew.swap,
                     profit=dataNew.profit,
-                    is_odd=dataNew.is_odd
+                    is_odd=getattr(dataSymbol, "is_odd", False) if dataSymbol else False
                 )
             db.commit()
     except Exception as e:
@@ -204,6 +205,7 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                         close_order_mt5(item.id)
 
                 dataOrder = db.query(SymbolTransaction).filter(SymbolTransaction.status == "filled").order_by(SymbolTransaction.time.desc()).all()
+                dataOrderBoot = db.query(SymbolMonitorBoot).filter(SymbolMonitorBoot.status == "filled").order_by(SymbolMonitorBoot.time.desc()).all()
 
                 existing = db.query(AccountsTransaction).filter(AccountsTransaction.username == int(account_info.login)).all()
                 new_data = AccountsTransaction(
@@ -231,10 +233,13 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                     })
 
                 db.commit()
-    
+                
+                # Gộp lại
+                all_orders = dataOrder + dataOrderBoot
+
                 results = []
                 with ThreadPoolExecutor() as executor:
-                    futures = [executor.submit(run_order, order) for order in dataOrder]
+                    futures = [executor.submit(run_order, order) for order in all_orders]
                     for future in as_completed(futures):
                         if future.result():  # chỉ thêm nếu có dữ liệu
                             results.append(future.result())
@@ -293,36 +298,37 @@ def auto_position(name, cfg, queue, stop_event, pub_queue):
                         )
                         .scalar()  # trả về 1 giá trị thay vì tuple
                     )
-                    filtered = [row for row in dataPosition if row[1] == username]
-                    if (total_profit <= -(monney_acc * (daily_risk / 100))):
-                        for row in filtered:
-                            dataSendOrder = close_positions_by_symbol(db, symbol= row[0], id_notification= 1, account_transaction_id= username)
-                            if (dataSendOrder['closed']):
-                                dataNotification = NotificationTransaction(
-                                    loginId = 1,
-                                    account_transaction_id = username,
-                                    symbol = row[0],
-                                    total_volume = row[4],
-                                    profit = row[2],
-                                    total_order = row[3],
-                                    risk = risk,
-                                    monney_acctransaction = monney_acc,
-                                    is_send= False,
-                                    isRead= False,
-                                    daily_risk= daily_risk,
-                                    type_notification = "daily"
-                                )
-                                db.add(dataNotification)
-                                db.flush()
+                    filtered = [row for row in dataPosition if int(row[1]) == int(username)]
+                    if (total_profit):
+                        if (total_profit <= -(monney_acc * (daily_risk / 100))):
+                            for row in filtered:
+                                dataSendOrder = close_positions_by_symbol(db, symbol= row[0], id_notification= 1, account_transaction_id= username)
+                                if (dataSendOrder['closed']):
+                                    dataNotification = NotificationTransaction(
+                                        loginId = 1,
+                                        account_transaction_id = username,
+                                        symbol = row[0],
+                                        total_volume = row[4],
+                                        profit = row[2],
+                                        total_order = row[3],
+                                        risk = risk,
+                                        monney_acctransaction = monney_acc,
+                                        is_send= False,
+                                        isRead= False,
+                                        daily_risk= daily_risk,
+                                        type_notification = "daily"
+                                    )
+                                    db.add(dataNotification)
+                                    db.flush()
 
-                                emit_sync("notification_message", dataNotification.to_dict())
+                                    emit_sync("notification_message", dataNotification.to_dict())
 
-                                for a in dataSendOrder['closed']:
-                                    print(a, row[0], "profit: ", row[2])
-                                    db.query(DealTransaction).filter(DealTransaction.ticket == a).update({"id_notification": dataNotification.id})
-                                    db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == a).update({"status": "cancelled"})
-                                    
-                                db.commit()
+                                    for a in dataSendOrder['closed']:
+                                        print(a, row[0], "profit: ", row[2])
+                                        db.query(DealTransaction).filter(DealTransaction.ticket == a).update({"id_notification": dataNotification.id})
+                                        db.query(SymbolTransaction).filter(SymbolTransaction.id_transaction == a).update({"status": "cancelled"})
+                                        
+                                    db.commit()
 
                     for row in filtered:
                         symbolRisk.append({
