@@ -9,8 +9,8 @@ router = APIRouter()
     
 @router.get("/note")
 def get_notes(current_user: dict = Depends(get_current_user)):
-    if str(current_user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    # if str(current_user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
     try:
         db = SessionLocal()
         data = db.query(Note).filter(Note.login == current_user.id).first()
@@ -20,8 +20,8 @@ def get_notes(current_user: dict = Depends(get_current_user)):
 
 @router.post("/note")
 def post_notes(data: NoteRequest,current_user: dict = Depends(get_current_user)):
-    if str(current_user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    # if str(current_user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
     try:
         db = SessionLocal()
         isCheck = db.query(Note).filter(Note.login == current_user.id).first()

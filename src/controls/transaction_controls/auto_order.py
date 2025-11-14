@@ -212,12 +212,6 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
         if tick is None:
             raise Exception(f"Không lấy được giá cho symbol: {symbol_replace}")
         
-        positions = mt5.positions_get(ticket=tick)
-        if positions is None:
-            raise Exception(f"Không tìm thấy tick: {tick}")
-        
-        pos = positions[0]
-        
         # Chuyển order_type từ chuỗi sang mã lệnh MT5
         order_type_map = {
             "BUY": ORDER_TYPE_BUY,
@@ -252,8 +246,13 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
             raise Exception(f"Gửi lệnh thất bại: {result.retcode} - {result.comment}")
         else:
             ticket_id = result.order
-            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol_replace, "id_transaction": ticket_id, "profit": pos.profit})
-            db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id, "profit": pos.profit})
+
+            # Lấy thông tin lệnh để lấy profit
+            pos = mt5.positions_get(ticket=ticket_id)
+            profit = pos[0].profit if pos else 0
+
+            db.query(SymbolTransaction).filter(SymbolTransaction.id == id_symbol).update({"status": "filled", "symbol": symbol_replace, "id_transaction": ticket_id, "profit": profit})
+            db.query(OrdersTransaction).filter(OrdersTransaction.id == id_symbol).update({"status": "filled", "id_transaction": ticket_id, "profit": profit})
             db.commit()
             print("✅ Lệnh đã gửi:", result)
             return result
@@ -305,6 +304,20 @@ def replace_suffix_with___(sym: str) -> str:
         # Nếu không match (trường hợp đặc biệt) thì fallback
         return sym.rstrip("cm")
 
+
+def normalize_symbols(data):
+    new_data = {}
+    for symbol, value in data.items():
+        # Nếu symbol đúng 6 ký tự (chưa có hậu tố)
+        if len(symbol) == 6:
+            new_key = symbol + "c"
+        else:
+            new_key = symbol  # Đã có hậu tố rồi
+        
+        new_data[new_key] = value
+    
+    return new_data
+
 def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
     mt5_connect(acc_transaction)
 
@@ -317,7 +330,7 @@ def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
 
         results = []
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(run_order, order, json.loads(priceCurrentSymbls)[replace_suffix_with_m(order.symbol)]) for order in dataSymbolOpenSend]
+            futures = [executor.submit(run_order, order, normalize_symbols(json.loads(priceCurrentSymbls))[replace_suffix_with_m(order.symbol)]) for order in dataSymbolOpenSend]
             for future in as_completed(futures):
                 try:
                     results.append(future.result())

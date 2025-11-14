@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -23,6 +23,7 @@ def get_user(db, username: str):
         data = db.query(UserModel).filter(UserModel.username == username).first()
         return data
     except Exception as e:
+        print("get_user: ",e)
         db.rollback()
     finally:
         db.close()
@@ -81,6 +82,13 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     finally:
         db.close()
 
+def get_current_admin(current_user: UserModel = Depends(get_current_user)):
+    if current_user.role.value != "admin":   # chú ý vì role là Enum
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản này không có quyền admin"
+        )
+    return current_user
 
 def def_create_acc_mt5(payload: RegisterRequestAccMt5, loginId, db):
     try: 

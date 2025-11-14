@@ -198,3 +198,7 @@ class SendOrderBootMonitorRequest(BaseModel):
     acc_monitor: int
     type: Literal["EXNESS", "FUND"]
     data: List[dataSendOrderBootMonitorRequest]
+
+class AssignAccountRequest(BaseModel):
+    user_id: int
+    account_id: int

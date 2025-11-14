@@ -1,14 +1,17 @@
+from fastapi import HTTPException
 from src.models.modelTransaction.schemas import SymbolTransactionRequest, PatchotRequest
 from src.models.modelTransaction.lot_information_model import LotInformation
 from src.models.modelTransaction.symbol_transaction_model import SymbolTransaction
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
+from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
 from sqlalchemy import func
 from datetime import datetime
 from src.services.terminals_transaction import terminals_transaction
 import re
+from src.models.modelDecentralization.modelUser import user_acc_transaction_association
 
 from MetaTrader5 import (
     ORDER_TYPE_BUY, ORDER_TYPE_SELL,
@@ -167,6 +170,16 @@ def place_market_lot(data: SymbolTransactionRequest, username_id):
 
     db = SessionLocal()
 
+    isCheck = db.query(AccountsTransaction).filter(AccountsTransaction.username == data.account_transaction_id).first()
+
+    usernames = db.query(user_acc_transaction_association).filter(
+            user_acc_transaction_association.c.user_id == username_id,
+            user_acc_transaction_association.c.acc_transaction_id == isCheck.id
+    ).first()
+
+    if not usernames:
+        raise HTTPException(status_code=403, detail=f"Bạn không có quyền vào lệnh cho TKGD: {data.account_transaction_id}")
+    
     lotNew = LotInformation(
         username_id=username_id,
         account_monitor_id=data.account_monitor_id,
@@ -288,8 +301,6 @@ def get_symbols_db(data, id_user):
             .limit(data['limit'])
             .all()
         )
-
-        
 
         # 🔹 Chuyển sang list dict và thêm trường mới
         result_data = []

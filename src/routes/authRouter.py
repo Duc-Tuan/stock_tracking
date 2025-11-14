@@ -5,10 +5,12 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from src.models.modelsUser import UserModel
 from src.middlewares.authMiddleware import get_db
-from pydantic import BaseModel
+from src.models.modelNote import Note
 from src.controls.authControll import create_user
 from src.utils.options import RegisterRequest
-from src.models.modelsUserToken import UserToken
+from src.controls.authControll import get_current_admin
+from src.models.modelTransaction.schemas import CloseFastLotItem
+from src.models.modelDecentralization.modelUser import user_mt5_association, user_acc_transaction_association
 
 router = APIRouter()
 
@@ -52,14 +54,37 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     return {"access_token": access_token, "token_type": "bearer", "deviceId": device_id}
 
 @router.post("/register")
-def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register_user(payload: RegisterRequest, current_admin: UserModel = Depends(get_current_admin), db: Session = Depends(get_db)):
     # Kiểm tra username tồn tại
     existing = db.query(UserModel).filter(UserModel.username == payload.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username đã tồn tại")
     
     new_user = create_user(payload, db)
-    return {"message": f"Đăng ký thành công cho user: {new_user.username}"}
+    return {"message": f"Đăng ký thành công cho user: {new_user.username}", "id": new_user.id}
+
+@router.delete("/user")
+def register_user(data: CloseFastLotItem, current_admin: UserModel = Depends(get_current_admin), db: Session = Depends(get_db)):
+    # Kiểm tra username tồn tại
+    existing = db.query(UserModel).filter(UserModel.id == data.id).first()
+
+    if not existing:
+        raise HTTPException(status_code=400, detail="Username không tồn tại tồn tại")
+    
+    db.query(user_mt5_association).filter(
+            user_mt5_association.c.user_id == existing.id
+        ).delete()
+    
+    db.query(user_acc_transaction_association).filter(
+            user_acc_transaction_association.c.user_id == existing.id
+        ).delete()
+    
+    db.query(Note).filter(Note.login == existing.id).delete()
+
+    db.query(UserModel).filter(UserModel.id == existing.id).delete()
+    db.commit()
+
+    return {"message": f"Đăng ký thành công cho user: {existing.username}"}
 
 # ✅ Route được bảo vệ
 @router.get("/me")

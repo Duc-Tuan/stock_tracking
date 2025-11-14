@@ -16,8 +16,8 @@ def set_position_transaction(
     type: Literal['BUY', 'SELL'] = Query(None),
     current_user: dict =Depends(get_current_user)):
 
-    if str(current_user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
+    # if str(current_user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập")
     
     try:
         data = {

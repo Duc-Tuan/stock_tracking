@@ -10,6 +10,7 @@ from src.services.publisher import monitor, tick_publisher, dispatcher
 from src.controls.transaction_controls.auto_order import auto_send_order_acc_transaction, send_socket_compare
 from src.controls.transaction_controls.auto_monitor_boot import auto_close_tp_monitor_boot
 from src.controls.update_swap_mt5 import daily_swap_process
+from src.services.send_order_monitor_sunday import sunday_btc_trade
 
 terminals = {
     "263006287": {
@@ -17,7 +18,13 @@ terminals = {
     },
     "183459647": {
         "path": "C:/Program Files/MetaTrader 5 - acc 2/terminal64.exe",
-    }
+    },
+    # "273912967": {
+    #     "path": "C:/Program Files/MetaTrader 5/terminal64.exe",
+    # },
+    # "205908671": {
+    #     "path": "C:/Program Files/MetaTrader 5 - acc 3/terminal64.exe",
+    # }
 }
 
 def start_mt5_monitor():
@@ -79,6 +86,11 @@ def start_mt5_monitor():
     p2 = Process(target=send_socket_compare, args=(pnl_queues_map, stop_event))
     p2.start()
     processes.append(p2)
+
+    # Process tự động CN trade BTC
+    sunday_trade_proc = Process(target=sunday_btc_trade, args=(terminals, stop_event))
+    sunday_trade_proc.start()
+    processes.append(sunday_trade_proc)
     
     try:
         # chờ các process kết thúc (nếu Ctrl+C -> handle_exit sẽ set stop_event)

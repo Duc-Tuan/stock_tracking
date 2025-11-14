@@ -1,167 +1,106 @@
-from datetime import timedelta
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from src.models.modelMultiAccountPnL import MultiAccountPnL
-from src.models.modelPNL import (
-    MultiAccountPnL_M1, MultiAccountPnL_M5, MultiAccountPnL_M10,
-    MultiAccountPnL_M15, MultiAccountPnL_M30,
-    MultiAccountPnL_H1, MultiAccountPnL_H2, MultiAccountPnL_H4,
-    MultiAccountPnL_H6, MultiAccountPnL_H8, MultiAccountPnL_H12,
-    MultiAccountPnL_D, MultiAccountPnL_W, MultiAccountPnL_MN,
-)
+# save as fx_stats_10y.py
+# pip install pandas requests python-dateutil
+import requests
+import io
 import pandas as pd
-import gc
-from src.models.model import Base as Base2
+from datetime import datetime, timedelta
+from dateutil import parser
 
-# ------------------- Config -------------------
-DB_PATH = "sqlite:///./pnl.db"
-engine = create_engine(DB_PATH)
-SessionLocal = sessionmaker(bind=engine)
-session = SessionLocal()
+# cấu hình
+symbols = {
+    "AUDCAD":"audcad",
+    "NZDCAD":"nzdcad",
+    "AUDNZD":"audnzd",
+    "CADCHF":"cadchf",
+    "EURCHF":"eurchf",
+    "EURGBP":"eurgbp",
 
-Base2.metadata.create_all(engine)
+    "EURJPY":"eurjpy",
+    "CADJPY":"cadjpy",
+    "AUDJPY":"audjpy",
+    "CHFJPY":"chfjpy",
+    "GBPJPY":"gbpjpy",
+    "NZDJPY":"nzdjpy",
+}
+# Ổn định: ngày cuối cùng là 2025-11-12 theo yêu cầu
+END_DATE = datetime(2025,11,12).date()
+START_DATE = END_DATE - timedelta(days=365*10 + 30)  # thêm 30 ngày đệm cho an toàn
 
-# ------------------- Hàm tính aggregate -------------------
-def aggregate(df_group):
-    open_ = df_group.iloc[0]["total_pnl"]
-    close = df_group.iloc[-1]["total_pnl"]
-    high = df_group["total_pnl"].max()
-    low = df_group["total_pnl"].min()
-    P = (close + high + low) / 3
-    time = df_group.iloc[-1]["time"]
-    login = df_group.iloc[-1]["login"]
+def download_stooq_csv(sym):
+    """Download CSV from Stooq. URL: https://stooq.com/q/d/l/?s=<sym>&i=d"""
+    url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.text
+
+def parse_csv_to_df(csv_text):
+    df = pd.read_csv(io.StringIO(csv_text), parse_dates=['Date'])
+    # Stooq CSV format: Date,Open,High,Low,Close,Volume
+    df = df.rename(columns={c:c.strip() for c in df.columns})
+    df['Date'] = pd.to_datetime(df['Date']).dt.date
+    return df
+
+def compute_stats_for_df(df):
+    # filter 10y range
+    mask = (df['Date'] >= START_DATE) & (df['Date'] <= END_DATE)
+    df10 = df.loc[mask].copy()
+    if df10.empty:
+        return None
+    # Highest price (high) and its date(s) — user asked "giá cao nhất trên khung D"
+    idx_high = df10['High'].idxmax()
+    highest = df10.loc[idx_high, 'High']
+    highest_date = df10.loc[idx_high, 'Date']
+    # Lowest price (low) and date
+    idx_low = df10['Low'].idxmin()
+    lowest = df10.loc[idx_low, 'Low']
+    lowest_date = df10.loc[idx_low, 'Date']
+    # Candle with highest high: range = high - low on that same row
+    idx_candle_high = idx_high
+    range_candle_high = df10.loc[idx_candle_high, 'High'] - df10.loc[idx_candle_high, 'Low']
+    # Candle with lowest low: range = high - low on that same row
+    idx_candle_low = idx_low
+    range_candle_low = df10.loc[idx_candle_low, 'High'] - df10.loc[idx_candle_low, 'Low']
     return {
-        "login": login,
-        "time": time,
-        "open": open_,
-        "high": high,
-        "low": low,
-        "close": close,
-        "P": P,
+        "highest": (float(highest), highest_date.isoformat()),
+        "lowest": (float(lowest), lowest_date.isoformat()),
+        "range_on_highest_high_candle": float(range_candle_high),
+        "range_on_lowest_low_candle": float(range_candle_low),
+        "rows_checked": len(df10)
     }
 
-# ------------------- Các khung thời gian -------------------
-def round_time(df, freq):
-    return df.groupby(["login", pd.Grouper(key="time", freq=freq)])
-
-timeframes = {
-    "M1": (MultiAccountPnL_M1, "1min"),
-    "M5": (MultiAccountPnL_M5, "5min"),
-    "M10": (MultiAccountPnL_M10, "10min"),
-    "M15": (MultiAccountPnL_M15, "15min"),
-    "M30": (MultiAccountPnL_M30, "30min"),
-
-    "H1": (MultiAccountPnL_H1, "1h"),
-    "H2": (MultiAccountPnL_H2, "2h"),
-    "H4": (MultiAccountPnL_H4, "4h"),
-    "H6": (MultiAccountPnL_H6, "6h"),
-    "H8": (MultiAccountPnL_H8, "8h"),
-    "H12": (MultiAccountPnL_H12, "12h"),
-
-    "W": (MultiAccountPnL_W, "1W"),
-    "MN": (MultiAccountPnL_MN, "1ME"),
-}
-
-# ------------------- Gom theo "ngày trade" (07h–07h) -------------------
-def group_custom_day(df):
-    df = df.copy()
-
-    # Chuẩn hóa timezone VN
-    if df["time"].dt.tz is None:
-        df["time"] = df["time"].dt.tz_localize("Asia/Bangkok")
-    else:
-        df["time"] = df["time"].dt.tz_convert("Asia/Bangkok")
-
-    df["shifted_time"] = df["time"] - pd.Timedelta(hours=7)
-    df["trade_day"] = df["shifted_time"].dt.date
-
-    def adjust_for_monday(row):
-        weekday = row["time"].weekday()
-        hour = row["time"].hour
-        if weekday == 0 and 4 <= hour < 7:
-            return f"{row['time'].date()}_mon_early"
-        return str(row["trade_day"])
-
-    df["trade_day"] = df.apply(adjust_for_monday, axis=1)
-    return df.groupby(["login", "trade_day"])
-
-# ------------------- Hàm sửa lỗi encoding -------------------
-def fix_encoding(s):
-    if not isinstance(s, str):
-        return s
-    try:
-        # Thử decode nếu bị lỗi cp1252 → utf-8
-        return s.encode("latin1").decode("utf-8")
-    except Exception:
+def main():
+    results = {}
+    for name, sym in symbols.items():
         try:
-            # Nếu vẫn lỗi thì bỏ ký tự không hợp lệ
-            return s.encode("utf-8", "ignore").decode("utf-8")
-        except Exception:
-            return s
+            print(f"Downloading {name} from Stooq...")
+            csv_text = download_stooq_csv(sym)
+            df = parse_csv_to_df(csv_text)
+            stats = compute_stats_for_df(df)
+            if stats is None:
+                print(f"  Không có dữ liệu 10 năm cho {name}")
+                results[name] = None
+            else:
+                results[name] = stats
+                print(f"  Done: checked {stats['rows_checked']} rows")
+        except Exception as e:
+            print(f"  Lỗi khi xử lý {name}: {e}")
+            results[name] = {"error": str(e)}
+    # In đẹp
+    print("\nKẾT QUẢ (10 năm tới {:%Y-%m-%d}):".format(END_DATE))
+    for name, v in results.items():
+        print("\n=== ", name)
+        if v is None:
+            print("  No data")
+            continue
+        if 'error' in v:
+            print("  Error:", v['error'])
+            continue
+        print(f"  1) Giá cao nhất (High): {v['highest'][0]:.6f}  — ngày {v['highest'][1]}")
+        print(f"  2) Giá thấp nhất (Low) : {v['lowest'][0]:.6f}  — ngày {v['lowest'][1]}")
+        print(f"  3) Lần tăng mạnh nhất (range của cây có HIGH lớn nhất): {v['range_on_highest_high_candle']:.6f}")
+        print(f"  4) Lần giảm mạnh nhất (range của cây có LOW thấp nhất):  {v['range_on_lowest_low_candle']:.6f}")
+    # bạn có thể lưu results ra JSON/CSV nếu muốn
+    return results
 
-# ------------------- Bắt đầu xử lý theo batch -------------------
-print("Đang đọc dữ liệu gốc (chia batch 1_000_000 dòng)...")
-
-BATCH_SIZE = 1_000_000
-offset = 0
-total_processed = 0
-
-while True:
-    batch = (
-        session.query(MultiAccountPnL)
-        .order_by(MultiAccountPnL.id)
-        .offset(offset)
-        .limit(BATCH_SIZE)
-        .all()
-    )
-
-    if not batch:
-        break
-
-    print(f"\n🟩 Đang xử lý batch {offset} → {offset + len(batch)} ({len(batch)} dòng)")
-
-    # Convert batch sang DataFrame
-    rows = [{
-        "id": d.id,
-        "login": d.login,
-        "time": d.time,
-        "total_pnl": d.total_pnl,
-        "num_positions": d.num_positions,
-        "by_symbol": d.by_symbol,
-    } for d in batch]
-
-    df = pd.DataFrame(rows)
-    df["time"] = pd.to_datetime(df["time"])
-
-    # 🔧 Fix lỗi encoding cột login
-    df["login"] = df["login"].astype(str).apply(fix_encoding)
-    if any("�" in s for s in df["login"]):
-        print("⚠️  Cảnh báo: Có ký tự lỗi trong login, đã cố gắng khôi phục encoding.")
-
-    # ---- Xử lý từng timeframe (M1–MN trừ D) ----
-    for tf_name, (Model, freq) in timeframes.items():
-        print(f"  ➜ Timeframe: {tf_name} ({freq})...")
-        grouped = round_time(df, freq)
-        result_rows = [aggregate(g) for _, g in grouped]
-        objs = [Model(**r) for r in result_rows]
-        session.bulk_save_objects(objs)
-        session.commit()
-        print(f"     ✅ Đã ghi {len(objs)} dòng vào {Model.__tablename__}")
-
-    # ---- Xử lý timeframe D ----
-    print("  ➜ Timeframe D (07h–07h, tách thứ 2)...")
-    grouped_d = group_custom_day(df)
-    result_rows_d = [aggregate(g) for _, g in grouped_d]
-    objs_d = [MultiAccountPnL_D(**r) for r in result_rows_d]
-    session.bulk_save_objects(objs_d)
-    session.commit()
-    print(f"     ✅ Đã ghi {len(objs_d)} dòng vào {MultiAccountPnL_D.__tablename__}")
-
-    # ---- Dọn RAM ----
-    total_processed += len(batch)
-    del df, rows, batch, result_rows, result_rows_d, objs, objs_d
-    gc.collect()
-
-    offset += BATCH_SIZE
-
-print(f"\n🎯 Hoàn tất xử lý toàn bộ dữ liệu ({total_processed:,} dòng)!")
+if __name__ == '__main__':
+    main()

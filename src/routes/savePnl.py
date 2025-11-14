@@ -5,13 +5,19 @@ import MetaTrader5 as mt5
 from datetime import datetime, date
 import queue as pyqueue
 from sqlalchemy.orm import Session
+from sqlalchemy import func, text
 
+# from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
 from src.utils.stop import swap_difference
 from src.services.socket_manager import emit_chat_message_sync
 from src.services.save_pnl_aggregator import save_pnl_to_timeframes
+
+from src.models.modelPNL import (
+    MultiAccountPnL_D, MultiAccountPnL_W, MultiAccountPnL_MN,
+)
 
 def sqlalchemy_to_dict(row):
     d = row.__dict__.copy()
@@ -27,6 +33,13 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
         print(f"[{name}] ❌ Không khởi tạo được MT5 ở {cfg['path']}")
         return
     session: Session = SessionLocal()
+
+    # ✅ Thêm bộ đếm và thời gian để checkpoint WAL định kỳ
+    checkpoint_counter = 0
+    last_checkpoint_time = time.time()
+    CHECKPOINT_INTERVAL = 300         # 300s = 5 phút
+    CHECKPOINT_BATCH_COUNT = 300      # hoặc mỗi 300 vòng lặp, whichever comes first
+
     try: 
         while not stop_event.is_set():
             try:
@@ -37,8 +50,9 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
             try:
                 # === Lấy thông tin PnL từ MT5 ===
                 account_info = mt5.account_info()
+                should_save_today = datetime.today().weekday() != 6
 
-                if account_info:
+                if account_info and should_save_today:
                     positions = mt5.positions_get()
                     if positions is None:
                         continue
@@ -86,7 +100,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     )
 
                     update_statistics(session, account_info.login, total_pnl)
-                    
+
                     session.commit()
 
                     statistical_login = (
@@ -110,6 +124,19 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                         "type": "pnl",
                         "data": data_send
                     })
+
+                    # ✅ Checkpoint WAL định kỳ (ngăn file .wal phình)
+                    checkpoint_counter += 1
+                    now = time.time()
+                    if checkpoint_counter >= CHECKPOINT_BATCH_COUNT or (now - last_checkpoint_time) > CHECKPOINT_INTERVAL:
+                        try:
+                            session.execute(text("PRAGMA wal_checkpoint(TRUNCATE);"))
+                            print(f"[{name}] ✅ WAL checkpoint done ({datetime.now().strftime('%H:%M:%S')})")
+                        except Exception as e:
+                            print(f"[{name}] ⚠️ Lỗi khi checkpoint WAL: {e}")
+                        checkpoint_counter = 0
+                        last_checkpoint_time = now
+
             except Exception as e:
                 session.rollback()
                 print(f"❌ Lỗi trong monitor_account: {e}")
@@ -118,7 +145,8 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
             
             # ✅ luôn gửi socket, kể cả khi auto_send_order_acc_transaction bị lỗi
             try:
-                emit_chat_message_sync("chat_message", data_send)
+                if should_save_today:
+                    emit_chat_message_sync("chat_message", data_send)
             except Exception as e:
                 print(f"❌ Lỗi emit_chat_message_sync: {e}")
 
@@ -139,62 +167,67 @@ def update_statistics(session, login: int, total_pnl: float):
         session.add(stat)
 
     # --- Ngày ---
-    if stat.best_day != today:
-        stat.day_min = total_pnl
-        stat.day_max = total_pnl
-        stat.best_day = today
-        stat.best_day_change = 0
-        stat.worst_day = today
-        stat.worst_day_change = 0
+    day_high = session.query(func.max(MultiAccountPnL_D.high)).filter_by(login=login).scalar() or total_pnl
+    day_low = session.query(func.min(MultiAccountPnL_D.low)).filter_by(login=login).scalar() or total_pnl
+
+    if total_pnl > day_high:
+        day_change = total_pnl - day_low
+    elif total_pnl < day_low:
+        day_change = day_high - total_pnl
     else:
-        stat.day_min = min(stat.day_min, total_pnl)
-        stat.day_max = max(stat.day_max, total_pnl)
-        change = stat.day_max - stat.day_min
-        if change > (stat.best_day_change or 0):
-            stat.best_day_change = change
-            stat.best_day = today
-        if change < (stat.worst_day_change or 0):
-            stat.worst_day_change = change
-            stat.worst_day = today
+        day_change = day_high - day_low
+
+    if not stat.best_day_change or day_change > stat.best_day_change:
+        stat.best_day_change = day_change
+        stat.best_day = today
+    if not stat.worst_day_change or day_change < stat.worst_day_change:
+        stat.worst_day_change = day_change
+        stat.worst_day = today
+
+    stat.day_max = max(day_high, total_pnl)
+    stat.day_min = min(day_low, total_pnl)
 
     # --- Tuần ---
-    if stat.best_week != week_str:
-        stat.week_min = total_pnl
-        stat.week_max = total_pnl
-        stat.best_week = week_str
-        stat.best_week_change = 0
-        stat.worst_week = week_str
-        stat.worst_week_change = 0
+    week_high = session.query(func.max(MultiAccountPnL_W.high)).filter_by(login=login).scalar() or total_pnl
+    week_low = session.query(func.min(MultiAccountPnL_W.low)).filter_by(login=login).scalar() or total_pnl
+
+    if total_pnl > week_high:
+        week_change = total_pnl - week_low
+    elif total_pnl < week_low:
+        week_change = week_high - total_pnl
     else:
-        stat.week_min = min(stat.week_min, total_pnl)
-        stat.week_max = max(stat.week_max, total_pnl)
-        change = stat.week_max - stat.week_min
-        if change > (stat.best_week_change or 0):
-            stat.best_week_change = change
-            stat.best_week = week_str
-        if change < (stat.worst_week_change or 0):
-            stat.worst_week_change = change
-            stat.worst_week = week_str
+        week_change = week_high - week_low
+
+    if not stat.best_week_change or week_change > stat.best_week_change:
+        stat.best_week_change = week_change
+        stat.best_week = week_str
+    if not stat.worst_week_change or week_change < stat.worst_week_change:
+        stat.worst_week_change = week_change
+        stat.worst_week = week_str
+
+    stat.week_max = max(week_high, total_pnl)
+    stat.week_min = min(week_low, total_pnl)
 
     # --- Tháng ---
-    if stat.best_month != month_str:
-        stat.month_min = total_pnl
-        stat.month_max = total_pnl
-        stat.best_month = month_str
-        stat.best_month_change = 0
-        stat.worst_month = month_str
-        stat.worst_month_change = 0
+    month_high = session.query(func.max(MultiAccountPnL_MN.high)).filter_by(login=login).scalar() or total_pnl
+    month_low = session.query(func.min(MultiAccountPnL_MN.low)).filter_by(login=login).scalar() or total_pnl
+
+    if total_pnl > month_high:
+        month_change = total_pnl - month_low
+    elif total_pnl < month_low:
+        month_change = month_high - total_pnl
     else:
-        stat.month_min = min(stat.month_min, total_pnl)
-        stat.month_max = max(stat.month_max, total_pnl)
-        change = stat.month_max - stat.month_min
-        if change > (stat.best_month_change or 0):
-            stat.best_month_change = change
-            stat.best_month = month_str
-        if change < (stat.worst_month_change or 0):
-            stat.worst_month_change = change
-            stat.worst_month = month_str
+        month_change = month_high - month_low
+
+    if not stat.best_month_change or month_change > stat.best_month_change:
+        stat.best_month_change = month_change
+        stat.best_month = month_str
+    if not stat.worst_month_change or month_change < stat.worst_month_change:
+        stat.worst_month_change = month_change
+        stat.worst_month = month_str
+
+    stat.month_max = max(month_high, total_pnl)
+    stat.month_min = min(month_low, total_pnl)
 
     stat.time = datetime.now()
     session.merge(stat)
-    # session.commit()

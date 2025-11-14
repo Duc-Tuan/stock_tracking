@@ -20,6 +20,8 @@ from src.routes.transaction.notification import router as notification_router
 from src.routes.transaction.odd_order import router as odd_order_router
 from src.routes.monitorBoot.sendOrderBoot import router as boot_monitor_router
 from src.routes.noteRouter import router as note_router
+from src.routes.decentralozition.assign_account import router as decentralozition_router
+from src.routes.decentralozition.user import router as user_router
 
 from src.services.socket_manager import sio
 from src.controls.authControll import get_current_user
@@ -32,9 +34,6 @@ Base.metadata.create_all(bind=engine)
 
 # Tạo FastAPI app
 app = FastAPI()
-
-# lưu loop chính toàn cục
-# main_loop = asyncio.get_event_loop()
 
 # Cho phép CORS
 app.add_middleware(
@@ -64,6 +63,9 @@ app.include_router(notification_router)
 app.include_router(odd_order_router)
 app.include_router(note_router)
 
+app.include_router(decentralozition_router)
+app.include_router(user_router)
+
 symbol_clients = defaultdict(set)
 
 @sio.event
@@ -75,9 +77,9 @@ async def connect(sid, environ):
 
     symbol_clients[symbol_id].add(sid)
 
-    user = get_current_user(token)
-    if str(user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập socket")
+    # user = get_current_user(token)
+    # if str(user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập socket")
     
     if symbol_id:
         # Lưu vào room để sau này emit riêng

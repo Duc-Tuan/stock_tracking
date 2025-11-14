@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Enum
 from src.models.model import Base, relationship
 import enum
+from src.models.modelDecentralization.modelUser import user_mt5_association, user_acc_transaction_association
 
 class UserRole(enum.Enum):
     admin = "admin"
@@ -14,6 +15,9 @@ class UserModel(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     role = Column(Enum(UserRole), nullable=False)
+
+    accounts = relationship("AccountMt5", secondary=user_mt5_association, back_populates="users")
+    accountsTransaction = relationship("AccountsTransaction", secondary=user_acc_transaction_association, back_populates="users")
 
     symbol_rel = relationship("SymbolTransaction", back_populates="user")
     deals = relationship("DealTransaction", back_populates="user")

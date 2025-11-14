@@ -42,8 +42,8 @@ def get_symbols(
     id_symbol: int = Query(..., ge=1),
     timeframe: str = Query("M1", pattern="^(M1|M5|M10|M15|M30|H1|H2|H4|H6|H8|H12|D|W|MN)$")
 ):
-    if str(current_user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+    # if str(current_user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
 
     try:
         
@@ -103,8 +103,8 @@ def get_statistical(
     db: Session = Depends(get_db),
     login_id: int = 0,
 ):
-    if str(current_user.role) != "UserRole.admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
+    # if str(current_user.role) != "UserRole.admin":
+    #     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập symbols")
 
     try:
         data = db.query(StatisticalPNL).filter(StatisticalPNL.login == login_id).all()
