@@ -202,3 +202,19 @@ class SendOrderBootMonitorRequest(BaseModel):
 class AssignAccountRequest(BaseModel):
     user_id: int
     account_id: int
+
+class BootBBRequest(BaseModel):
+    id: int | None = None
+    bb1: float
+    bb2: float
+    period: int
+    acc_monitor: int
+    acc_transaction: int
+    volume_start: float
+    entry_point: float
+    rsi_upper: float
+    rsi_low: float
+    rsi_period: int
+    start: bool
+    profit_close: float
+    TF: Literal["M1", "M5", "M10", "M15", "M30", "H1", "H2", "H4", "H6", "H8", "H12", "D", "W", "MN"]

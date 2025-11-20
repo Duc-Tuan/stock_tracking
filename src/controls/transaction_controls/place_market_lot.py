@@ -5,6 +5,7 @@ from src.models.modelTransaction.symbol_transaction_model import SymbolTransacti
 from src.models.modelTransaction.orders_transaction_model import OrdersTransaction
 from src.models.modelTransaction.position_transaction_model import PositionTransaction
 from src.models.modelTransaction.accounts_transaction_model import AccountsTransaction
+from src.models.modelsUser import UserModel
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.models.model import SessionLocal
 from sqlalchemy import func
@@ -165,23 +166,28 @@ def run_order(order, data, username_id, lot_id):
     except Exception as e:
         return {"symbol": order.symbol, "status": "error", "message": str(e)}
 
-def place_market_lot(data: SymbolTransactionRequest, username_id):
+def place_market_lot(data: SymbolTransactionRequest, username_id, boot_id_bb=None):
     mt5_connect(data.account_transaction_id)  # đảm bảo MT5 đã connect 1 lần
 
     db = SessionLocal()
 
     isCheck = db.query(AccountsTransaction).filter(AccountsTransaction.username == data.account_transaction_id).first()
 
-    usernames = db.query(user_acc_transaction_association).filter(
-            user_acc_transaction_association.c.user_id == username_id,
-            user_acc_transaction_association.c.acc_transaction_id == isCheck.id
-    ).first()
+    isCheckRole = db.query(UserModel).filter(UserModel.id == username_id).first()
+    usernames = isCheckRole
+
+    if (isCheckRole.role.value != 'admin'):
+        usernames = db.query(user_acc_transaction_association).filter(
+                user_acc_transaction_association.c.user_id == username_id,
+                user_acc_transaction_association.c.acc_transaction_id == isCheck.id
+        ).first()
 
     if not usernames:
         raise HTTPException(status_code=403, detail=f"Bạn không có quyền vào lệnh cho TKGD: {data.account_transaction_id}")
     
     lotNew = LotInformation(
         username_id=username_id,
+        boot_id_bb=boot_id_bb,
         account_monitor_id=data.account_monitor_id,
         account_transaction_id=data.account_transaction_id,
         price=data.price,
@@ -272,7 +278,7 @@ def get_symbols_db(data, id_user):
         query = db.query(LotInformation)
 
         # Danh sách các điều kiện động
-        filters = [LotInformation.username_id == id_user]
+        filters = [LotInformation.username_id == id_user, LotInformation.boot_id_bb.is_(None)]
 
         if data['status'] is not None:
             filters.append(LotInformation.status == data['status'])
@@ -290,7 +296,6 @@ def get_symbols_db(data, id_user):
         if data['end_time'] is not None:
             end_dt = datetime.fromtimestamp(int(data['end_time']) / 1000)
             filters.append(LotInformation.time <= end_dt)
-            
 
         total = db.query(func.count(LotInformation.id)).filter(*filters).scalar()
 

@@ -22,6 +22,7 @@ from src.routes.monitorBoot.sendOrderBoot import router as boot_monitor_router
 from src.routes.noteRouter import router as note_router
 from src.routes.decentralozition.assign_account import router as decentralozition_router
 from src.routes.decentralozition.user import router as user_router
+from src.routes.bootStrategy.bootBBRouter import router as boot_bb_router
 
 from src.services.socket_manager import sio
 from src.controls.authControll import get_current_user
@@ -65,6 +66,8 @@ app.include_router(note_router)
 
 app.include_router(decentralozition_router)
 app.include_router(user_router)
+
+app.include_router(boot_bb_router)
 
 symbol_clients = defaultdict(set)
 

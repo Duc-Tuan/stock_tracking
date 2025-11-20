@@ -6,14 +6,15 @@ from datetime import datetime, date
 import queue as pyqueue
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
-
 # from src.models.modelMultiAccountPnL import MultiAccountPnL
 from src.models.modelstatisticalPnl import StatisticalPNL
 from src.models.model import SessionLocal
 from src.models.modelAccMt5 import AccountMt5
 from src.utils.stop import swap_difference
-from src.services.socket_manager import emit_chat_message_sync
+from src.services.socket_manager import emit_chat_message_sync, emit_sync
 from src.services.save_pnl_aggregator import save_pnl_to_timeframes
+from src.utils.resVps import getVps, postVps
+
 
 from src.models.modelPNL import (
     MultiAccountPnL_D, MultiAccountPnL_W, MultiAccountPnL_MN,
@@ -40,6 +41,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
     CHECKPOINT_INTERVAL = 300         # 300s = 5 phút
     CHECKPOINT_BATCH_COUNT = 300      # hoặc mỗi 300 vòng lặp, whichever comes first
 
+    accmt5monitor = []
     try: 
         while not stop_event.is_set():
             try:
@@ -82,16 +84,19 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                     by_symbol_json = json.dumps(by_symbol)
                     by_symbol_json_acc_monitor = json.dumps(symbols_acc_monitor)
 
-                    existing = session.query(AccountMt5).filter(AccountMt5.username == account_info.login).all()
-                    if (len(existing) == 0):
-                        new_data = AccountMt5(
-                            username=account_info.login, 
-                            password='', 
-                            loginId=1, 
-                            server=account_info.server, 
-                            by_symbol=by_symbol_json_acc_monitor
-                        )
-                        session.add(new_data)
+                    
+                    if not any(a["login"] == account_info.login for a in accmt5monitor):
+                        params = {
+                            "username": account_info.login, 
+                            "server": account_info.server, 
+                            "by_symbol": by_symbol_json_acc_monitor
+                        }
+                        resget = getVps("accmt5_isCheck", params)
+                        if (resget['status'] == 200):
+                            accmt5monitor.append({"login": account_info.login})
+                        if (resget['status'] == 400):
+                            respost = postVps("accmt5", params)
+                            print(respost)
 
                     save_pnl_to_timeframes(
                         session=session,
@@ -117,6 +122,11 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
                         "by_symbol": by_symbol_json,
                         "time": datetime.now().isoformat(),
                         "statistical": result_statistical
+                    }
+
+                    data_send_all = {
+                        "login": account_info.login,
+                        "total_pnl": total_pnl
                     }
 
                     pub_queue.put({   # 👈 gửi vào pub_queue để dispatcher phân phát
@@ -146,6 +156,7 @@ def monitor_account(name, cfg, queue, stop_event, pub_queue):
             # ✅ luôn gửi socket, kể cả khi auto_send_order_acc_transaction bị lỗi
             try:
                 if should_save_today:
+                    emit_sync("all_pnl_acc_monitor", data_send_all)
                     emit_chat_message_sync("chat_message", data_send)
             except Exception as e:
                 print(f"❌ Lỗi emit_chat_message_sync: {e}")

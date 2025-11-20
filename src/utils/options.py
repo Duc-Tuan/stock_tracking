@@ -17,6 +17,8 @@ SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SEND_TIME = os.getenv("SEND_TIME")
 SEND_TIME_UPDATE_SWAP_SUMMER = os.getenv("SEND_TIME_UPDATE_SWAP_SUMMER")
 SEND_TIME_UPDATE_SWAP_WINTER = os.getenv("SEND_TIME_UPDATE_SWAP_WINTER")
+TOKEN_VPS = os.getenv("TOKEN_VPS")
+API_VPS = os.getenv("API_VPS")
 
 class RegisterRequest(BaseModel):
     username: str
@@ -32,7 +34,7 @@ class UpdateRiskAccTransaction(BaseModel):
     id_daily_risk: int = None
     id_acc: int
     monney_acc: int = None
-    type_acc: Literal["QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "RECIPROCAL_ACC", "COM", "SWWING" ,"VAY", "DEMO"] = None
+    type_acc: Literal["QUY", "USD", "COPY", "DEPOSIT", "RECIPROCAL", "RECIPROCAL_ACC", "COM", "SWWING" ,"VAY", "DEMO", "BOOT_STRATEGY"] = None
 
 def object_as_dict(obj):
     return {

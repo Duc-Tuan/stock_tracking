@@ -133,10 +133,9 @@ def close_send(dataSymbol: SymbolTransaction):
             "magic": pos.magic,
             "comment": f"Close order {pos.ticket}",
             "type_time": mt5.ORDER_TIME_GTC,
-            # "type_filling": mt5.ORDER_FILLING_IOC,
         }
 
-        if "Exness" in isCheckServerAccTransac(dataSymbol.account_transaction_id):
+        if "Exness" not in isCheckServerAccTransac(dataSymbol.account_transaction_id):
             request["type_filling"] = mt5.ORDER_FILLING_IOC
 
         # Gửi lệnh đóng
@@ -156,7 +155,7 @@ def close_send(dataSymbol: SymbolTransaction):
         print(f"Lỗi ở close_send: {e}")
     finally:
         db.close()
-
+        
 def run_order_close(dataLot: LotInformation):
     mt5_connect(dataLot.account_transaction_id)
     db = SessionLocal()
@@ -192,10 +191,19 @@ def close_order_mt5(id: int):
     finally:
         db.close()
 
+def replace_suffix_with_WEMATER(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0) + "x"
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm") + "x"
+    
 def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_symbol: int, acc_transaction: int):
     db = SessionLocal()
     try: 
-        symbol_replace = symbol
+        symbol_replace = replace_suffix_with_WEMATER(symbol)
 
         # CHU Y CHO NAY
         if "Exness" in isCheckServerAccTransac(acc_transaction):
@@ -238,7 +246,7 @@ def order_send_mt5(price: float, symbol: str, lot: float, order_type: str, id_sy
             # "type_filling": ORDER_FILLING_IOC,
         }
 
-        if "Exness" in isCheckServerAccTransac(acc_transaction):
+        if "Exness" not in isCheckServerAccTransac(acc_transaction):
             request["type_filling"] = ORDER_FILLING_IOC
 
         result = mt5.order_send(request)
@@ -266,7 +274,7 @@ def run_order(order: SymbolTransaction, symbols_transaction):
     try:
         message = order_send_mt5(
             price=symbols_transaction["current_price"],
-            symbol=replace_suffix_with(order.symbol),
+            symbol=order.symbol,
             lot=order.volume,
             order_type=order.type,
             id_symbol=order.id,
@@ -318,6 +326,15 @@ def normalize_symbols(data):
     
     return new_data
 
+def replace_suffix_with_c(sym: str) -> str:
+    # Lấy phần chữ cái và số chính (base symbol)
+    base = re.match(r"[A-Z]{6}", sym.upper())
+    if base:
+        return base.group(0) + "c"
+    else:
+        # Nếu không match (trường hợp đặc biệt) thì fallback
+        return sym.rstrip("cm") + "c"
+    
 def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
     mt5_connect(acc_transaction)
 
@@ -329,8 +346,9 @@ def open_order_mt5(acc_transaction: int, id_lot: int, priceCurrentSymbls: str):
         ).order_by(SymbolTransaction.time.desc()).all()
 
         results = []
+        dataConvert = normalize_symbols(json.loads(priceCurrentSymbls))
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(run_order, order, normalize_symbols(json.loads(priceCurrentSymbls))[replace_suffix_with_m(order.symbol)]) for order in dataSymbolOpenSend]
+            futures = [executor.submit(run_order, order, dataConvert[replace_suffix_with_c(order.symbol)]) for order in dataSymbolOpenSend]
             for future in as_completed(futures):
                 try:
                     results.append(future.result())
